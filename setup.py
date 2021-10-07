@@ -26,7 +26,7 @@ setup(
         'astroquery>=0.4.3',
         'matplotlib',
         'numpy',
-        'photutils',
+        'photutils>=1.0.0',
         'scipy>=1.5.0',
         'setuptools',
         'tqdm'
