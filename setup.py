@@ -15,7 +15,7 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
     ],
-    py_modules=['sed_creator'],
+    py_modules=['sedcreator'],
     url='https://github.com/fedriani/sedcreator/setup.py',
     project_urls={"Bug Tracker":"https://github.com/fedriani/sedcreator/issues"},
     author='Ruben Fedriani',
@@ -34,5 +34,5 @@ setup(
     packages=find_packages(),
     python_requires=">=3.6",
     include_package_data=True,
-    package_data={'sed_creator.Model_SEDs': ['parfiles/*']},
+    package_data={'sedcreator.Model_SEDs': ['parfiles/*']},
 )
