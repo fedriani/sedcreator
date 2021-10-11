@@ -15,6 +15,7 @@ rcParams['font.family'] = 'serif'
 #rcParams['text.usetex'] = True
 #rcParams['ps.useafm'] = True
 rcParams['font.size'] = 12
+rcParams['mathtext.fontset'] = 'cm'
 
 from astropy.io import fits as pyfits
 from astropy.io import ascii
@@ -2011,8 +2012,8 @@ class ModelPlotter(FitterContainer):
         ax1.set_xticklabels([10.0,40.0,120.0,480.0])
         ax1.set_yticklabels(np.unique(models['sigma']))
 
-        ax1.set_xlabel(r'$M_c\,(M_\odot)$')
-        ax1.set_ylabel(r'$\Sigma\,(\mathrm{g\,cm^{-2}})$')
+        ax1.set_xlabel(r'$M_\mathrm{c}\,(M_\odot)$')
+        ax1.set_ylabel(r'$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$')
 
         ax1.set_aspect(1.0/ax1.get_data_ratio(), adjustable='box')
 
@@ -2062,7 +2063,7 @@ class ModelPlotter(FitterContainer):
         ax2.set_xticklabels([10.0,40.0,120.0,480.0])
         ax2.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
 
-        ax2.set_xlabel(r'$M_c\,(M_\odot)$')
+        ax2.set_xlabel(r'$M_\mathrm{c}\,(M_\odot)$')
         ax2.set_ylabel(r'$m_*\,(M_\odot)$')
 
         ax2.set_aspect(1.0/ax2.get_data_ratio(), adjustable='box')
@@ -2114,7 +2115,7 @@ class ModelPlotter(FitterContainer):
         ax3.set_xticklabels(np.unique(models['sigma']))
         ax3.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
 
-        ax3.set_xlabel(r'$\Sigma\,(\mathrm{g\,cm^{-2}})$')
+        ax3.set_xlabel(r'$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$')
         ax3.set_ylabel(r'$m_*\,(M_\odot)$')
 
         ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
