@@ -1,7 +1,7 @@
 # sedcreator
 sedcreator is a package that has two main classes, SedFluxer and SedFitter. SedFluxer performs aperture photometry on a given image, coordinates and aperture size. It has a number of functions to print useful information and to plot the image together with apertures. SedFitter fits observations to a grid of models following the Zhang&Tan radiative transfer models.
 
-![alt text](https://github.com/fedriani/sedcreator/blob/main/sedcreator_logo.png)
+![alt text](https://github.com/fedriani/sedcreator/raw/main/sedcreator_logo.png)
 
 
 ## Installation
