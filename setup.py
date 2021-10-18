@@ -16,7 +16,7 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     py_modules=['sedcreator'],
-    url='https://github.com/fedriani/sedcreator/setup.py',
+    url='https://github.com/fedriani/sedcreator',
     project_urls={"Bug Tracker":"https://github.com/fedriani/sedcreator/issues"},
     author='Ruben Fedriani',
     author_email='ruben.fedriani@gmail.com',
