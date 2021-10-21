@@ -148,6 +148,7 @@ class FluxerContainer():
             print('Flux        ',self.flux, 'unitless')
             print('Background  ',self.flux-self.flux_bkgsub, 'unitless')
             print('############################')
+            print('Please, perform your own units transformation')            
         else:
             print('')
 
