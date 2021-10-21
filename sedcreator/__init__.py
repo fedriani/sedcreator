@@ -40,7 +40,7 @@ class FluxerContainer():
     def __init__(self,data=None,flux_bkgsub=None,flux=None,
                  central_coords=None,aper_rad=None,inner_annu=None,outer_annu=None,
                  x_source=None,y_source=None,aper_rad_pixel=None,wcs_header= None,
-                 aperture=None,annulus_aperture=None):
+                 aperture=None,annulus_aperture=None,flux_method=None):
         self.data = data
         self.flux_bkgsub = flux_bkgsub
         self.flux = flux
@@ -54,6 +54,7 @@ class FluxerContainer():
         self.wcs_header = wcs_header
         self.aperture = aperture
         self.annulus_aperture = annulus_aperture
+        self.flux_method = flux_method
         self.__value = None
         self.__info = None
 
@@ -89,6 +90,7 @@ class FluxerContainer():
         
         #reading the data
         data,header = self.data
+        flux_method = self.flux_method
 
         #retrieves the pixel scale or size from the header
         if 'CD1_1' in header:
@@ -133,12 +135,21 @@ class FluxerContainer():
         else:
             print('Regarding wavelength:\nYou are probably using HERSCHEL or ALMA, look at the first extension of the header')
 
-        print('############################')
-        print('Flux bkg sub',self.flux_bkgsub, 'Jy')
-        print('Flux        ',self.flux, 'Jy')
-        print('Background  ',self.flux-self.flux_bkgsub, 'Jy')
-        print('############################')
-        print('(unitless in the case of get_raw_flux())')
+        if flux_method=='get_flux':
+            print('############################')
+            print('Flux bkg sub',self.flux_bkgsub, 'Jy')
+            print('Flux        ',self.flux, 'Jy')
+            print('Background  ',self.flux-self.flux_bkgsub, 'Jy')
+            print('############################')
+
+        elif flux_method=='get_raw_flux':
+            print('############################')
+            print('Flux bkg sub',self.flux_bkgsub, 'unitless')
+            print('Flux        ',self.flux, 'unitless')
+            print('Background  ',self.flux-self.flux_bkgsub, 'unitless')
+            print('############################')
+        else:
+            print('')
 
         
     def plot(self,cmap='gray',aperture_color='black',annulus_color='red',title=None,path=None,figname='image_with_aperture.pdf'):
@@ -374,22 +385,26 @@ class SedFluxer:
                         flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
                     else:
                         raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
-                else: #here it is assume that BUNIT is Jy/pix or Jy
+                elif header['BUNIT']=='Jy/pix' or header['BUNIT']=='Jy/pixel':
                     flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = ap_phot['aperture_sum'].data[0] #Jy
+                else:
+                    raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
             #TODO: add mJy/pix here!
             elif 'FUNITS' in header:
-                if header['FUNITS']=='Jy/pix':#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                if header['FUNITS']=='Jy/pix' or header['FUNITS']=='Jy/pixel':#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
                     flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = ap_phot['aperture_sum'].data[0] #Jy
+                else:
+                    raise Exception('FUNITS (',header['FUNITS'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
             else:
-                raise Exception('Neither BUNIT nor FUNIT found in the header')
+                raise Exception('Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation')
                 
 
         return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
-                 aperture=aperture,annulus_aperture=annulus_aperture)
+                 aperture=aperture,annulus_aperture=annulus_aperture,flux_method='get_flux')
 
     def get_raw_flux(self,central_coords,aper_rad,inner_annu,outer_annu):
         '''
@@ -470,8 +485,7 @@ class SedFluxer:
         return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
-                 aperture=aperture,annulus_aperture=annulus_aperture)
-
+                 aperture=aperture,annulus_aperture=annulus_aperture,flux_method='get_raw_flux')
 class FitterContainer():
     '''
     A class to store the results from the SedFluxer class
