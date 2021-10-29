@@ -90,7 +90,7 @@ G35N_upper_limit_idx = np.array([1,1,0,0,0,0,0,0,0,1,1],dtype=bool) #setting the
 
 #initialasing the SedFitter class
 
-YSO_fit =SedFitter('khm',G35N_filt_wav_arr1,G35N_flux_arr1,G35N_errup_arr1,G35N_upper_limit_idx,G35N_filter_arr1)
+YSO_fit =SedFitter('kmh',G35N_filt_wav_arr1,G35N_flux_arr1,G35N_errup_arr1,G35N_upper_limit_idx,G35N_filter_arr1)
 
 #performing the SED grid fit
 YSO_fit.sed_fit(dist=G35N_dist,AV_max=100)
