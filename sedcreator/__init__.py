@@ -767,6 +767,8 @@ class FitterContainer():
             number_of_models = len(average_model_table_chisq)
             if number_of_models==0:
                 raise ValueError('The considered constraints in chisq_cut produce an empty table. Please consider to relax them.')
+            if number_of_models==1:
+                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
             data=np.array(['average model method 2',number_of_models,
                            gmean(average_model_table_chisq['mcore']),gstd(average_model_table_chisq['mcore']),
@@ -802,6 +804,8 @@ class FitterContainer():
             number_of_models = len(average_model_table_rcore)
             if number_of_models==0:
                 raise ValueError('The considered constraints in core_radius_cut produce an empty table. Please consider to relax them.')
+            if number_of_models==1:
+                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
 
             data=np.array(['average model method 2',number_of_models,
@@ -838,6 +842,8 @@ class FitterContainer():
             number_of_models = len(average_model_table_chisq_rcore)
             if number_of_models==0:
                 raise ValueError('The considered constraints either in chisq_cut or core_radius_cut produce an empty table. Please consider to relax them.')
+            if number_of_models==1:
+                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
             data=np.array(['average model method 2',number_of_models,
                            gmean(average_model_table_chisq_rcore['mcore']),gstd(average_model_table_chisq_rcore['mcore']),
@@ -1770,6 +1776,8 @@ class SedFitter(object):
             number_of_models = len(average_model_table_chisq)
             if number_of_models==0:
                 raise ValueError('The considered constraints in chisq_cut produce an empty table. Please consider to relax them.')
+            if number_of_models==1:
+                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
             data=np.array(['average model method 2',number_of_models,
                            gmean(average_model_table_chisq['mcore']),gstd(average_model_table_chisq['mcore']),
@@ -1805,6 +1813,8 @@ class SedFitter(object):
             number_of_models = len(average_model_table_rcore)
             if number_of_models==0:
                 raise ValueError('The considered constraints in core_radius_cut produce an empty table. Please consider to relax them.')
+            if number_of_models==1:
+                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
 
             data=np.array(['average model method 2',number_of_models,
@@ -1841,6 +1851,8 @@ class SedFitter(object):
             number_of_models = len(average_model_table_chisq_rcore)
             if number_of_models==0:
                 raise ValueError('The considered constraints either in chisq_cut or core_radius_cut produce an empty table. Please consider to relax them.')
+            if number_of_models==1:
+                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
             data=np.array(['average model method 2',number_of_models,
                            gmean(average_model_table_chisq_rcore['mcore']),gstd(average_model_table_chisq_rcore['mcore']),
@@ -1913,7 +1925,6 @@ class SedFitter(object):
             print('Table saved in ',path)
             
         return(final_average_table)
-
 
     #Indepent Plots
     #TODO: Put all the plots in this class
