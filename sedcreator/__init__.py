@@ -153,7 +153,7 @@ class FluxerContainer():
             print('')
 
         
-    def plot(self,cmap='gray',aperture_color='black',annulus_color='red',title=None,path=None,figname='image_with_aperture.pdf'):
+    def plot(self,cmap='gray',percent_norm=99.5,colorbar=False,aperture_color='black',annulus_color='red',title=None,path=None,figname='image_with_aperture.pdf'):
         '''
         Plots the used image together with the aperture used for the flux
         and the annulus for the background subtraction.
@@ -185,7 +185,7 @@ class FluxerContainer():
         
         plt.figure()
         plt.subplot(projection=self.wcs_header)
-        norm = simple_norm(data[data>0], 'sqrt', percent=99.5)
+        norm = simple_norm(data[data>0], 'sqrt', percent=percent_norm)
         plt.imshow(data, cmap=cmap, origin='lower', norm=norm)
         plt.plot(self.x_source,self.y_source,'rx')
         plt.xlim(self.x_source-5.0*self.aper_rad_pixel,self.x_source+5.0*self.aper_rad_pixel)
@@ -194,13 +194,21 @@ class FluxerContainer():
         plt.ylabel('Dec (J2000)')
         self.aperture.plot(color=aperture_color)
         self.annulus_aperture.plot(color=annulus_color)
+        
+        if colorbar:
+            if 'BUNIT' in header:
+                plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
+            elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
+                plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
+            else:
+                plt.colorbar(label='PixelUnits: check header', pad=0.01)
         if title is not None:
             plt.title(title)
         if path is not None:
             plt.savefig(path+'/'+figname,dpi=300,bbox_inches='tight')
             print('Image saved in ',path)
         plt.show()
-
+        
 class SedFluxer:
     
     def __init__(self,image):
