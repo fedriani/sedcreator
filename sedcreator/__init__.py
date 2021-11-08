@@ -495,8 +495,93 @@ class SedFluxer:
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
                  aperture=aperture,annulus_aperture=annulus_aperture,flux_method='get_raw_flux')
-                 
-                 
+
+    def get_optimal_aperture(self,central_coords,ap_inner=5.0,ap_outer=60.0,aper_increase=1.3,threshold=1.1,profile_plot=False):
+        '''
+        Finds the optimal aperture based on the following method:
+        EXPLAIN METHOD.
+        In short: if one increases by 30% the aperture size, the flux does not increase by
+        more than threshold %
+
+
+        Parameters
+        ----------
+        image: fits file
+            Image for which we would like to calculate the "optimal" aperture radius
+        central_coords: `astropy.coordinates.SkyCoord`
+                    Central coordinates where the apertures will be centred on the data image.
+                    This must be a SkyCoord statement.
+        ap_inner: float
+                Inner aperture radius given in arcsec. The script will take care to convert it into pixels.
+                It the starting point to find the optimal aperture. Default is 5.0 arcsec.
+        ap_outer: float
+                Outer aperture radius given in arcsec. The script will take care to convert it into pixels.
+                It the ending point to find the optimal aperture. Default is 60.0 arcsec.
+        aper_increase: float
+            It is the increase in aperture to meet the condition
+            aper_increase*optimal radius <= flux at opt.rad. * threshold. Default is 1.30, i.e. 30% increase in aperture.
+        threshold: float
+            It is the condition to be met such as, at the optimal aperture radius,
+            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.08, i.e. 10% increase in flux.
+        profile_plot: bool
+            Plots the flux profile versus the aperture radius size. Default is False
+        Returns
+        -------
+        opt_rad: float
+            Optimal aperture radius defined by this method given in arcsec
+
+        '''
+        
+        FLUX_BKG = []
+        FLUX = []
+
+
+        #Step size for sampling aperture radii
+        step = 0.25
+        #Sample aperture radii
+        APER_RAD = np.arange(ap_inner, ap_outer, step)#arcsec
+
+
+        for radius in APER_RAD:
+            flux_bkg, flux = self.get_flux(central_coords=central_coords,
+                                           aper_rad=radius,
+                                           inner_annu=1.0*radius,
+                                           outer_annu=2.0*radius).value
+            FLUX_BKG.append(flux_bkg)
+            FLUX.append(flux)
+
+
+
+        x = np.copy(APER_RAD)
+        y = np.copy(FLUX_BKG)
+
+        for i in range(len(x)-1):
+            #ideal radius is the radius 30% past the current radius
+            ideal_radius = aper_increase*x[i]
+            #closest_radius_ind is the index of the radius we have sampled closest to this ideal
+            closest_radius_ind = np.argmin(np.abs(x - ideal_radius))
+            #flux at this closest radius
+            flux = y[closest_radius_ind]
+
+            if flux <= y[i]*threshold:
+                opt_rad = x[i]
+                break
+
+        if profile_plot:
+
+            plt.figure()
+            plt.plot(x, y,'ro', markersize=2.5, label="Bkg-sub flux")
+            plt.plot(x, FLUX,'bo', markersize=2.5, label="Non-bkg-sub flux")
+
+            plt.axvline(x=opt_rad, color="black", label="Optimal Aperture")
+            plt.xlabel("Aperture radius (arcsec)",  fontsize=14)
+            plt.ylabel('Flux (Jy)', fontsize=14)
+            plt.legend()
+            plt.show()
+
+        return opt_rad
+
+
 class FitterContainer():
     '''
     A class to store the results from the SedFluxer class
