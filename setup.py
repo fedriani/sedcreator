@@ -6,7 +6,7 @@ with open("README.md","r", encoding="utf-8") as fh:
     
 setup(
     name="sedcreator",
-    version='0.5.10',
+    version='0.5.11',
     description='sedcreator is a package that has two main classes, SedFluxer and SedFitter. SedFluxer performs aperture photometry on a given image, coordinates and aperture size. It has a number of functions to print useful information and to plot the image together with apertures. SedFitter fits observations to a grid of models following the Zhang and Tan (2018) radiative transfer models.',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -34,5 +34,5 @@ setup(
     packages=find_packages(),
     python_requires=">=3.6",
     include_package_data=True,
-    package_data={'sedcreator.Model_SEDs': ['*']},
+    package_data={'sedcreator.Model_SEDs': ['/*']},
 )
