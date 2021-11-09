@@ -1,4 +1,4 @@
 include LICENSE.txt
 include README.md
 include setup.py
-recursive-include scr/Model_SEDs/parfiles *
+recursive-include scr/Model_SEDs/*
