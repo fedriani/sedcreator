@@ -1,4 +1,4 @@
-#packages needed for the sed_creator to work
+#packages needed for the sedcreator to work
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
@@ -1075,7 +1075,7 @@ class SedFitter(object):
         self.__print_default_filters = None
     
     def get_master_dir(self):
-        master_dir = pkg_resources.resource_filename("sed_creator","/")
+        master_dir = pkg_resources.resource_filename("sedcreator","/")
         return(master_dir)
         
     def get_model_data(self):
