@@ -34,5 +34,5 @@ setup(
     packages=find_packages(),
     python_requires=">=3.6",
     include_package_data=True,
-    package_data={'sedcreator.Model_SEDs': ['/*']},
+    package_data={'sedcreator': ['Model_SEDs/*']},
 )
