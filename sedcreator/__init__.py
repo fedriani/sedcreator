@@ -191,7 +191,10 @@ class FluxerContainer():
         
         plt.figure()
         plt.subplot(projection=self.wcs_header)
-        norm = simple_norm(data[data>0], stretch=stretch, percent=percent)
+        #consider only the portion of the image shown for the scale normalisation
+        data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
+                             int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
+        norm = simple_norm(data_for_norm[data_for_norm>0], stretch=stretch, percent=percent)
         plt.imshow(data, cmap=cmap, origin='lower', norm=norm)
         plt.plot(self.x_source,self.y_source,'rx')
         plt.xlim(self.x_source-5.0*self.aper_rad_pixel,self.x_source+5.0*self.aper_rad_pixel)
@@ -202,12 +205,15 @@ class FluxerContainer():
         self.annulus_aperture.plot(color=annulus_color)
         
         if colorbar:
+            cbar_ticks = np.around(np.linspace(norm.vmin,norm.vmax,num=5))
             if 'BUNIT' in header:
-                plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
+                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
             elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
-                plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
+                cbar = plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
             else:
-                plt.colorbar(label='PixelUnits: check header', pad=0.01)
+                cbar = plt.colorbar(label='PixelUnits: check header', pad=0.01)
+            cbar.set_ticks(cbar_ticks)
+            cbar.set_ticklabels(cbar_ticks)
         if title is not None:
             plt.title(title)
         if path is not None:
