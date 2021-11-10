@@ -153,7 +153,7 @@ class FluxerContainer():
             print('')
 
         
-    def plot(self,cmap='gray',percent_norm=99.5,colorbar=False,aperture_color='black',annulus_color='red',title=None,path=None,figname='image_with_aperture.pdf'):
+    def plot(self,cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',title=None,path=None,figname='image_with_aperture.pdf'):
         '''
         Plots the used image together with the aperture used for the flux
         and the annulus for the background subtraction.
@@ -162,7 +162,13 @@ class FluxerContainer():
         ----------
         cmap: str
             Color map from matplolib to be used in the image. Default is 'gray'
-        
+        stretch: {'linear', 'sqrt', 'power', 'log', 'asinh'}, optional
+            The stretch function to apply to the image. The default is 'log'.
+        percent: float, optional
+            The percentage of the image values used to determine the pixel values
+            of the minimum and maximum cut levels. The lower cut level will set at the
+            (100 - percent) / 2 percentile, while the upper cut level will be set at the
+            (100 + percent) / 2 percentile. The default is 100.0.
         aperture_color: str
                     Circular aperture color to show in the image. Default is 'black'
                     
@@ -185,7 +191,7 @@ class FluxerContainer():
         
         plt.figure()
         plt.subplot(projection=self.wcs_header)
-        norm = simple_norm(data[data>0], 'sqrt', percent=percent_norm)
+        norm = simple_norm(data[data>0], stretch=stretch, percent=percent)
         plt.imshow(data, cmap=cmap, origin='lower', norm=norm)
         plt.plot(self.x_source,self.y_source,'rx')
         plt.xlim(self.x_source-5.0*self.aper_rad_pixel,self.x_source+5.0*self.aper_rad_pixel)
@@ -620,8 +626,8 @@ class FitterContainer():
     def get_available_ms(self):
         return set(self.models_array[:,2])
 
-    def get_index_from_model(self,mc,sigma,mstar,):
-        return index
+    def get_index_from_model(self,mc,sigma,mstar,theta_view):
+        return mc,sigma,mstar,theta_view
 
     #TODO: Change mu variable by theta or theta_view
     def get_model_info(self,keys=['mcore','sigma','mstar','theta_view'],path=None,tablename='model_info.dat'):
@@ -900,8 +906,8 @@ class FitterContainer():
                            np.mean(average_model_table_rcore['theta_view']),np.std(average_model_table_rcore['theta_view']),
                            np.mean(average_model_table_rcore['dist']),
                            np.mean(average_model_table_rcore['av']),np.std(average_model_table_rcore['av']),
-                           gmean(aaverage_model_table_rcore['rcore']),gstd(average_model_table_rcore['rcore']),
-                           gmean(aaverage_model_table_rcore['massenv']),gstd(average_model_table_rcore['massenv']),
+                           gmean(average_model_table_rcore['rcore']),gstd(average_model_table_rcore['rcore']),
+                           gmean(average_model_table_rcore['massenv']),gstd(average_model_table_rcore['massenv']),
                            np.mean(average_model_table_rcore['theta_w_esc']),np.std(average_model_table_rcore['theta_w_esc']),
                            gmean(average_model_table_rcore['rstar']),gstd(average_model_table_rcore['rstar']),
                            gmean(average_model_table_rcore['lstar']),gstd(average_model_table_rcore['lstar']),
@@ -1909,8 +1915,8 @@ class SedFitter(object):
                            np.mean(average_model_table_rcore['theta_view']),np.std(average_model_table_rcore['theta_view']),
                            np.mean(average_model_table_rcore['dist']),
                            np.mean(average_model_table_rcore['av']),np.std(average_model_table_rcore['av']),
-                           gmean(aaverage_model_table_rcore['rcore']),gstd(average_model_table_rcore['rcore']),
-                           gmean(aaverage_model_table_rcore['massenv']),gstd(average_model_table_rcore['massenv']),
+                           gmean(average_model_table_rcore['rcore']),gstd(average_model_table_rcore['rcore']),
+                           gmean(average_model_table_rcore['massenv']),gstd(average_model_table_rcore['massenv']),
                            np.mean(average_model_table_rcore['theta_w_esc']),np.std(average_model_table_rcore['theta_w_esc']),
                            gmean(average_model_table_rcore['rstar']),gstd(average_model_table_rcore['rstar']),
                            gmean(average_model_table_rcore['lstar']),gstd(average_model_table_rcore['lstar']),
