@@ -602,11 +602,6 @@ class FitterContainer():
     ----------
     get_model_info: `astropy.table`
         Gets the model information from the results of the SED fit
-    
-    get_average_model: `astropy.table`
-        Get the average model by means of calculating the geometric mean
-        for all parameters except for av, theta_view, and theta_w_esc from which arithmetic mean is calculated
-    
     '''
     
     def __init__(self,models,master_dir="./",extinction_law="kmh",
@@ -775,244 +770,6 @@ class FitterContainer():
         
         return(table_model_unique)
 
-
-    def get_average_model(self,models,number_of_models=5,chisq_cut=None,core_radius_cut=None,path=None,tablename='average_models.dat'):
-        '''
-        Get the average model by means of calculating the geometric mean
-        for all parameters except for av, theta_view, and theta_w_esc from which arithmetic mean is calculated
-
-        models must be the astropy table obtained from the SED results that has column names defined.
-        
-        There are two methods for the average. The first just take the number of models specified (default 5)
-        and the second takes into account a chisq cut and/or radius_cut. When set the chisq_cut, it will consider
-        all models below that chisq_cut value. When set the core_radius_cut, it will consider all models with
-        the model output core radius is smaller than the core_radius_cutvalue.
-        
-        Parameters
-        ----------
-        models: table, `astropy.table`
-            models to be averaged over. It should be an astropy table got from the get_model_info() function.
-
-        number_of_models: int
-            Number of models to be used for the average for method 1.
-
-        chisq_cut: float
-            Chisq cut value to consider all models below
-                        
-        core_radius_cut: float
-            Core radius cut value to consider all models below
-
-        path: str, optional
-            Path to save the table. Default is None
-
-        tablename: str, optional
-            Name of the table. Default is 'model_info.dat'.
-            Note that one can choose the format of the table by changing the extension.
-                    
-        Returns
-        ----------
-        table: `astropy.table` with all the model information based on the given keys
-        '''
-        
-        master_dir = self.master_dir
-        
-        average_model_table = models[0:int(number_of_models)]
-
-        columns_names = ['method','number_of_models_used',
-                         'mcore','Dmcore','sigma','Dsigma','mstar','Dmstar','theta_view','Dtheta_view',
-                         'dist','av','Dav','rcore','Drcore','massenv','Dmassenv','theta_w_esc','Dtheta_w_esc',
-                         'rstar','Drstar','lstar','Dlstar','tstar','Dtstar','mdisk','Dmdisk','rdisk','Drdisk',
-                         'mdotd','Dmdotd','lbol','Dlbol','lbol_iso','Dlbol_iso','lbol_av','Dlbol_av','t_now','Dt_now']
-
-        units = [u.dimensionless_unscaled,u.dimensionless_unscaled,
-                 u.M_sun,u.dimensionless_unscaled,u.g*u.cm**-2,u.dimensionless_unscaled,u.M_sun,u.dimensionless_unscaled,u.deg,u.deg,
-                 u.pc,u.mag,u.mag,u.pc,u.dimensionless_unscaled,u.M_sun,u.dimensionless_unscaled,u.deg,u.deg,
-                 u.R_sun,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.K,u.dimensionless_unscaled,u.M_sun,u.dimensionless_unscaled,u.au,u.dimensionless_unscaled,
-                 u.M_sun/u.yr,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.yr,u.dimensionless_unscaled]
-
-        data=np.array(['average model method 1',number_of_models,
-                       gmean(average_model_table['mcore']),gstd(average_model_table['mcore']),
-                       gmean(average_model_table['sigma']),gstd(average_model_table['sigma']),
-                       gmean(average_model_table['mstar']),gstd(average_model_table['mstar']),
-                       np.mean(average_model_table['theta_view']),np.std(average_model_table['theta_view']),
-                       np.mean(average_model_table['dist']),
-                       np.mean(average_model_table['av']),np.std(average_model_table['av']),
-                       gmean(average_model_table['rcore']),gstd(average_model_table['rcore']),
-                       gmean(average_model_table['massenv']),gstd(average_model_table['massenv']),
-                       np.mean(average_model_table['theta_w_esc']),np.std(average_model_table['theta_w_esc']),
-                       gmean(average_model_table['rstar']),gstd(average_model_table['rstar']),
-                       gmean(average_model_table['lstar']),gstd(average_model_table['lstar']),
-                       gmean(average_model_table['tstar']),gstd(average_model_table['tstar']),
-                       gmean(average_model_table['mdisk']),gstd(average_model_table['mdisk']),
-                       gmean(average_model_table['rdisk']),gstd(average_model_table['rdisk']),
-                       gmean(average_model_table['mdotd']),gstd(average_model_table['mdotd']),
-                       gmean(average_model_table['lbol']),gstd(average_model_table['lbol']),
-                       gmean(average_model_table['lbol_iso']),gstd(average_model_table['lbol_iso']),
-                       gmean(average_model_table['lbol_av']),gstd(average_model_table['lbol_av']),
-                       gmean(average_model_table['t_now']),gstd(average_model_table['t_now'])],dtype=object)
-
-        dtype = [str,int,float,float,float,float,float,float,float,float,float,float,float,
-                 float,float,float,float,float,float,float,float,float,float,float,float,float,
-                 float,float,float,float,float,float,float,float,float,float,float,float,float]
-
-        final_average_table = Table(data = data, names = columns_names, units=units, dtype=dtype)
-
-
-        if chisq_cut is not None and core_radius_cut is None:
-            average_model_table_chisq = models[models['chisq']<=chisq_cut]
-
-            number_of_models = len(average_model_table_chisq)
-            if number_of_models==0:
-                raise ValueError('The considered constraints in chisq_cut produce an empty table. Please consider to relax them.')
-            if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
-
-            data=np.array(['average model method 2',number_of_models,
-                           gmean(average_model_table_chisq['mcore']),gstd(average_model_table_chisq['mcore']),
-                           gmean(average_model_table_chisq['sigma']),gstd(average_model_table_chisq['sigma']),
-                           gmean(average_model_table_chisq['mstar']),gstd(average_model_table_chisq['mstar']),
-                           np.mean(average_model_table_chisq['theta_view']),np.std(average_model_table_chisq['theta_view']),
-                           np.mean(average_model_table_chisq['dist']),
-                           np.mean(average_model_table_chisq['av']),np.std(average_model_table_chisq['av']),
-                           gmean(average_model_table_chisq['rcore']),gstd(average_model_table_chisq['rcore']),
-                           gmean(average_model_table_chisq['massenv']),gstd(average_model_table_chisq['massenv']),
-                           np.mean(average_model_table_chisq['theta_w_esc']),np.std(average_model_table_chisq['theta_w_esc']),
-                           gmean(average_model_table_chisq['rstar']),gstd(average_model_table_chisq['rstar']),
-                           gmean(average_model_table_chisq['lstar']),gstd(average_model_table_chisq['lstar']),
-                           gmean(average_model_table_chisq['tstar']),gstd(average_model_table_chisq['tstar']),
-                           gmean(average_model_table_chisq['mdisk']),gstd(average_model_table_chisq['mdisk']),
-                           gmean(average_model_table_chisq['rdisk']),gstd(average_model_table_chisq['rdisk']),
-                           gmean(average_model_table_chisq['mdotd']),gstd(average_model_table_chisq['mdotd']),
-                           gmean(average_model_table_chisq['lbol']),gstd(average_model_table_chisq['lbol']),
-                           gmean(average_model_table_chisq['lbol_iso']),gstd(average_model_table_chisq['lbol_iso']),
-                           gmean(average_model_table_chisq['lbol_av']),gstd(average_model_table_chisq['lbol_av']),
-                           gmean(average_model_table_chisq['t_now']),gstd(average_model_table_chisq['t_now'])],dtype=object)
-
-            final_average_table.add_row(vals=data)
-
-
-        elif chisq_cut is None and core_radius_cut is not None:
-            distance = models['dist'][0] #pc
-            core_radius_cut_au = core_radius_cut * distance #arcsec x pc = au
-            core_radius_cut_pc = core_radius_cut_au*u.au.to(u.pc) #from au to pc
-
-            average_model_table_rcore = models[models['rcore']<=core_radius_cut_pc]
-
-            number_of_models = len(average_model_table_rcore)
-            if number_of_models==0:
-                raise ValueError('The considered constraints in core_radius_cut produce an empty table. Please consider to relax them.')
-            if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
-
-
-            data=np.array(['average model method 2',number_of_models,
-                           gmean(average_model_table_rcore['mcore']),gstd(average_model_table_rcore['mcore']),
-                           gmean(average_model_table_rcore['sigma']),gstd(average_model_table_rcore['sigma']),
-                           gmean(average_model_table_rcore['mstar']),gstd(average_model_table_rcore['mstar']),
-                           np.mean(average_model_table_rcore['theta_view']),np.std(average_model_table_rcore['theta_view']),
-                           np.mean(average_model_table_rcore['dist']),
-                           np.mean(average_model_table_rcore['av']),np.std(average_model_table_rcore['av']),
-                           gmean(average_model_table_rcore['rcore']),gstd(average_model_table_rcore['rcore']),
-                           gmean(average_model_table_rcore['massenv']),gstd(average_model_table_rcore['massenv']),
-                           np.mean(average_model_table_rcore['theta_w_esc']),np.std(average_model_table_rcore['theta_w_esc']),
-                           gmean(average_model_table_rcore['rstar']),gstd(average_model_table_rcore['rstar']),
-                           gmean(average_model_table_rcore['lstar']),gstd(average_model_table_rcore['lstar']),
-                           gmean(average_model_table_rcore['tstar']),gstd(average_model_table_rcore['tstar']),
-                           gmean(average_model_table_rcore['mdisk']),gstd(average_model_table_rcore['mdisk']),
-                           gmean(average_model_table_rcore['rdisk']),gstd(average_model_table_rcore['rdisk']),
-                           gmean(average_model_table_rcore['mdotd']),gstd(average_model_table_rcore['mdotd']),
-                           gmean(average_model_table_rcore['lbol']),gstd(average_model_table_rcore['lbol']),
-                           gmean(average_model_table_rcore['lbol_iso']),gstd(average_model_table_rcore['lbol_iso']),
-                           gmean(average_model_table_rcore['lbol_av']),gstd(average_model_table_rcore['lbol_av']),
-                           gmean(average_model_table_rcore['t_now']),gstd(average_model_table_rcore['t_now'])],dtype=object)
-
-            final_average_table.add_row(vals=data)
-
-
-        elif chisq_cut is not None and core_radius_cut is not None:
-            distance = models['dist'][0] #pc
-            core_radius_cut_au = core_radius_cut * distance #arcsec x pc = au
-            core_radius_cut_pc = core_radius_cut_au*u.au.to(u.pc) #from au to pc
-
-            average_model_table_chisq_rcore = models[(models['chisq']<=chisq_cut) & (models['rcore']<=core_radius_cut_pc)]
-
-            number_of_models = len(average_model_table_chisq_rcore)
-            if number_of_models==0:
-                raise ValueError('The considered constraints either in chisq_cut or core_radius_cut produce an empty table. Please consider to relax them.')
-            if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
-
-            data=np.array(['average model method 2',number_of_models,
-                           gmean(average_model_table_chisq_rcore['mcore']),gstd(average_model_table_chisq_rcore['mcore']),
-                           gmean(average_model_table_chisq_rcore['sigma']),gstd(average_model_table_chisq_rcore['sigma']),
-                           gmean(average_model_table_chisq_rcore['mstar']),gstd(average_model_table_chisq_rcore['mstar']),
-                           np.mean(average_model_table_chisq_rcore['theta_view']),np.std(average_model_table_chisq_rcore['theta_view']),
-                           np.mean(average_model_table_chisq_rcore['dist']),
-                           np.mean(average_model_table_chisq_rcore['av']),np.std(average_model_table_chisq_rcore['av']),
-                           gmean(average_model_table_chisq_rcore['rcore']),gstd(average_model_table_chisq_rcore['rcore']),
-                           gmean(average_model_table_chisq_rcore['massenv']),gstd(average_model_table_chisq_rcore['massenv']),
-                           np.mean(average_model_table_chisq_rcore['theta_w_esc']),np.std(average_model_table_chisq_rcore['theta_w_esc']),
-                           gmean(average_model_table_chisq_rcore['rstar']),gstd(average_model_table_chisq_rcore['rstar']),
-                           gmean(average_model_table_chisq_rcore['lstar']),gstd(average_model_table_chisq_rcore['lstar']),
-                           gmean(average_model_table_chisq_rcore['tstar']),gstd(average_model_table_chisq_rcore['tstar']),
-                           gmean(average_model_table_chisq_rcore['mdisk']),gstd(average_model_table_chisq_rcore['mdisk']),
-                           gmean(average_model_table_chisq_rcore['rdisk']),gstd(average_model_table_chisq_rcore['rdisk']),
-                           gmean(average_model_table_chisq_rcore['mdotd']),gstd(average_model_table_chisq_rcore['mdotd']),
-                           gmean(average_model_table_chisq_rcore['lbol']),gstd(average_model_table_chisq_rcore['lbol']),
-                           gmean(average_model_table_chisq_rcore['lbol_iso']),gstd(average_model_table_chisq_rcore['lbol_iso']),
-                           gmean(average_model_table_chisq_rcore['lbol_av']),gstd(average_model_table_chisq_rcore['lbol_av']),
-                           gmean(average_model_table_chisq_rcore['t_now']),gstd(average_model_table_chisq_rcore['t_now'])],dtype=object)
-
-            final_average_table.add_row(vals=data)
-
-        #For format consistency
-        final_average_table['mcore'].info.format = '%.5f'
-        final_average_table['Dmcore'].info.format = '%.5f'
-        final_average_table['sigma'].info.format = '%.5f'
-        final_average_table['Dsigma'].info.format = '%.5f'
-        final_average_table['mstar'].info.format = '%.5f'
-        final_average_table['Dmstar'].info.format = '%.5f'
-        final_average_table['theta_view'].info.format = '%.5f'
-        final_average_table['Dtheta_view'].info.format = '%.5f'
-        final_average_table['av'].info.format = '%.5f'
-        final_average_table['Dav'].info.format = '%.5f'
-        final_average_table['rcore'].info.format = '%.5f'
-        final_average_table['Drcore'].info.format = '%.5f'
-        final_average_table['massenv'].info.format = '%.5f'
-        final_average_table['Dmassenv'].info.format = '%.5f'
-        final_average_table['theta_w_esc'].info.format = '%.5f'
-        final_average_table['Dtheta_w_esc'].info.format = '%.5f'
-        final_average_table['theta_w_esc'].info.format = '%.5f'
-        final_average_table['Dtheta_w_esc'].info.format = '%.5f'
-        final_average_table['rstar'].info.format = '%.5f'
-        final_average_table['Drstar'].info.format = '%.5f'
-        final_average_table['lstar'].info.format = '%.5e'
-        final_average_table['Dlstar'].info.format = '%.5f'
-        final_average_table['tstar'].info.format = '%.5e'
-        final_average_table['Dtstar'].info.format = '%.5f'
-        final_average_table['mdisk'].info.format = '%.5f'
-        final_average_table['Dmdisk'].info.format = '%.5f'
-        final_average_table['rdisk'].info.format = '%.5e'
-        final_average_table['Drdisk'].info.format = '%.5f'
-        final_average_table['mdotd'].info.format = '%.5e'
-        final_average_table['Dmdotd'].info.format = '%.5f'
-        final_average_table['theta_w_esc'].info.format = '%.5e'
-        final_average_table['Dtheta_w_esc'].info.format = '%.5f'
-        final_average_table['lbol'].info.format = '%.5e'
-        final_average_table['Dlbol'].info.format = '%.5f'
-        final_average_table['lbol_iso'].info.format = '%.5e'
-        final_average_table['Dlbol_iso'].info.format = '%.5f'
-        final_average_table['lbol_av'].info.format = '%.5e'
-        final_average_table['Dlbol_av'].info.format = '%.5f'
-        final_average_table['t_now'].info.format = '%.5e'
-        final_average_table['Dt_now'].info.format = '%.5f'
-
-        
-        if path is not None:
-            ascii.write(final_average_table,path+'/'+tablename)
-            print('Table saved in ',path)
-            
-        return(final_average_table)
 
     @property
     def best_model(self):
@@ -1785,7 +1542,7 @@ class SedFitter(object):
         return
 
 
-    def get_average_model(self,models,number_of_models=5,chisq_cut=None,core_radius_cut=None,path=None,tablename='average_models.dat'):
+    def get_average_model(self,models,number_of_models=5,chisq_cut=None,core_radius_cut=None,method=None,path=None,tablename='average_models.dat'):
         '''
         Get the average model by means of calculating the geometric mean
         for all parameters except for av, theta_view, and theta_w_esc from which arithmetic mean is calculated
@@ -1810,6 +1567,13 @@ class SedFitter(object):
                         
         core_radius_cut: float
             Core radius cut value to consider all models below
+
+        method: str, {'liu','moser'} optional
+            Defines the method for backwards compatibilty with previous works.
+            liu takes the best 5 models OR FEWER with the condition chi2<chis2min+5 and Rc<2Rap
+            moser takes the best 10 models OR FEWER with the condition chis2<2*chi2min.
+            The chis2 and core radius conditions have to be given as usual.
+            The method only takes the best 5 (or 10) OR FEWER models satisfying the condition.
 
         path: str, optional
             Path to save the table. Default is None
@@ -1876,6 +1640,22 @@ class SedFitter(object):
             if number_of_models==1:
                 raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
+            if method is not None:
+                if method == 'liu':
+                    if len(average_model_table_chisq)>=5:
+                        average_model_table_chisq = average_model_table_chisq[0:5]
+                    else:
+                        average_model_table_chisq = average_model_table_chisq
+                elif method == 'moser':
+                    if len(average_model_table_chisq)>=10:
+                        average_model_table_chisq = average_model_table_chisq[0:10]
+                    else:
+                        average_model_table_chisq = average_model_table_chisq
+                else:
+                    raise ValueError('Method must be either liu, moser or None')                
+            
+            number_of_models = len(average_model_table_chisq)
+            
             data=np.array(['average model method 2',number_of_models,
                            gmean(average_model_table_chisq['mcore']),gstd(average_model_table_chisq['mcore']),
                            gmean(average_model_table_chisq['sigma']),gstd(average_model_table_chisq['sigma']),
@@ -1896,7 +1676,7 @@ class SedFitter(object):
                            gmean(average_model_table_chisq['lbol_iso']),gstd(average_model_table_chisq['lbol_iso']),
                            gmean(average_model_table_chisq['lbol_av']),gstd(average_model_table_chisq['lbol_av']),
                            gmean(average_model_table_chisq['t_now']),gstd(average_model_table_chisq['t_now'])],dtype=object)
-
+            
             final_average_table.add_row(vals=data)
 
 
@@ -1913,7 +1693,22 @@ class SedFitter(object):
             if number_of_models==1:
                 raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
-
+            if method is not None:
+                if method == 'liu':
+                    if len(average_model_table_rcore)>=5:
+                        average_model_table_rcore = average_model_table_rcore[0:5]
+                    else:
+                        average_model_table_rcore = average_model_table_rcore
+                elif method == 'moser':
+                    if len(average_model_table_rcore)>=10:
+                        average_model_table_rcore = average_model_table_rcore[0:10]
+                    else:
+                        average_model_table_rcore = average_model_table_rcore
+                else:
+                    raise ValueError('Method must be either liu, moser or None')                
+            
+            number_of_models = len(average_model_table_rcore)
+            
             data=np.array(['average model method 2',number_of_models,
                            gmean(average_model_table_rcore['mcore']),gstd(average_model_table_rcore['mcore']),
                            gmean(average_model_table_rcore['sigma']),gstd(average_model_table_rcore['sigma']),
@@ -1934,8 +1729,8 @@ class SedFitter(object):
                            gmean(average_model_table_rcore['lbol_iso']),gstd(average_model_table_rcore['lbol_iso']),
                            gmean(average_model_table_rcore['lbol_av']),gstd(average_model_table_rcore['lbol_av']),
                            gmean(average_model_table_rcore['t_now']),gstd(average_model_table_rcore['t_now'])],dtype=object)
-
-            final_average_table.add_row(vals=data)
+                    
+            final_average_table.add_row(vals=data)        
 
 
         elif chisq_cut is not None and core_radius_cut is not None:
@@ -1951,6 +1746,22 @@ class SedFitter(object):
             if number_of_models==1:
                 raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
+            if method is not None:
+                if method == 'liu':
+                    if len(average_model_table_chisq_rcore)>=5:
+                        average_model_table_chisq_rcore = average_model_table_chisq_rcore[0:5]
+                    else:
+                        average_model_table_chisq_rcore = average_model_table_chisq_rcore
+                elif method == 'moser':
+                    if len(average_model_table_chisq_rcore)>=10:
+                        average_model_table_chisq_rcore = average_model_table_chisq_rcore[0:10]
+                    else:
+                        average_model_table_chisq_rcore = average_model_table_chisq_rcore
+                else:
+                    raise ValueError('Method must be either liu, moser or None')                
+            
+            number_of_models = len(average_model_table_chisq_rcore)
+            
             data=np.array(['average model method 2',number_of_models,
                            gmean(average_model_table_chisq_rcore['mcore']),gstd(average_model_table_chisq_rcore['mcore']),
                            gmean(average_model_table_chisq_rcore['sigma']),gstd(average_model_table_chisq_rcore['sigma']),
@@ -1971,7 +1782,7 @@ class SedFitter(object):
                            gmean(average_model_table_chisq_rcore['lbol_iso']),gstd(average_model_table_chisq_rcore['lbol_iso']),
                            gmean(average_model_table_chisq_rcore['lbol_av']),gstd(average_model_table_chisq_rcore['lbol_av']),
                            gmean(average_model_table_chisq_rcore['t_now']),gstd(average_model_table_chisq_rcore['t_now'])],dtype=object)
-
+                    
             final_average_table.add_row(vals=data)
 
         #For format consistency
@@ -2019,7 +1830,7 @@ class SedFitter(object):
         
         if path is not None:
             ascii.write(final_average_table,path+'/'+tablename)
-            print('Table saved in ',path)
+            print('Table saved in ',path)    
             
         return(final_average_table)
 
