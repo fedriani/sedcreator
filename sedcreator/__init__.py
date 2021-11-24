@@ -1334,10 +1334,10 @@ class SedFitter(object):
             np.savetxt(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt',
                        list(zip(lambda_array,response_array)),header=header0,fmt='%.5e',delimiter=' ',newline='\n')
             with open(master_dir+'/Model_SEDs/parfiles/filter_default.dat','ab') as filter_default:
-                np.savetxt(filter_default,[np.array([filter_name,np.median(lambda_array),instrument],dtype=str)],fmt='%s', delimiter=' ')
-            
+                np.savetxt(filter_default,[np.array([filter_name,np.around(np.median(lambda_array),decimals=1),instrument],dtype=str)],fmt='%s', delimiter=' ')
+
             print(filter_name+'.txt succesfully saved in '+master_dir+'Model_SEDs/parfiles/')
-            
+
         #For the IDL method we need the convolved fluxes for the new filter in a fits file
         #(this is a translation from the IDL script filtflux.pro)
         #Note that this is not needed for the new method as it convolves on the fly
@@ -2067,7 +2067,7 @@ class ModelPlotter(FitterContainer):
         cmap = plt.cm.ScalarMappable(cmap=cmap,
                                      norm=colors.LogNorm(vmin=models['chisq'].min(),
                                                          vmax=models['chisq'].max()))
-        cmap.set_array([])
+        #cmap.set_array([])
 
         plt.figure(figsize=figsize)
         for ind_mod in models:
