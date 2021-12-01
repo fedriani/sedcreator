@@ -1484,7 +1484,47 @@ class SedFitter(object):
                                 continue
 
             pyfits.writeto(master_dir+'Model_SEDs/flux_filt/'+filter_name+'.fits',flux_model_conv)
+
+
+    def plot_filter(self,filter_name,figsize=(6,4),title=None,path=None,figname='filter_response.pdf'):
+        '''
+        Plots a filter in the database. To see the available filter use SedFitter().print_default_filters
+        
+        Parameters
+        ----------
+        filter_name: array of str
+                array of strings with the name of the filter.
+                E.g. if one filter is given ['filter1'],
+                if two filters (or more) are given ['filter1','filter2']
+            
+        Returns
+        ----------
+        None
+        '''
+        
+        master_dir = self.master_dir
+
+        existing_filters = os.listdir(master_dir+'/Model_SEDs/parfiles/')
+
+        plt.figure(figsize=figsize)
+        
+        for filt in filter_name:
+            if filt+'.txt' in existing_filters:
+                lambda_array,response_array = np.loadtxt(master_dir+'/Model_SEDs/parfiles/'+filt+'.txt',unpack=True)
+            else:
+                print('WARNING! The filter ' + filt + ' is not in the database')
                 
+            plt.step(lambda_array,response_array)
+        plt.xlabel('$\lambda\,(\mu\mathrm{m})$')
+        plt.ylabel('Filter Response (arbitrary units)')
+        if title is not None:
+            plt.title(title)
+        if path is not None:
+            plt.savefig(path+'/'+figname, dpi=300, bbox_inches="tight")
+            print('Image saved in ',path)
+        plt.show()
+
+
     def table2latex(self,table,keys=['chisq','mcore','sigma','rcore','mstar','theta_view','av','massenv','theta_w_esc','mdotd','lbol_iso','lbol'],path='./',tablename='results_table_latex.txt'):
         '''
         Outputs the astropy table into a latex table given the keys properly
