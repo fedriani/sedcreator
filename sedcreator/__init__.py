@@ -1330,14 +1330,17 @@ class SedFitter(object):
         if filter_name+'.txt' in existing_filters:
             print('WARNING! The filter ' + filter_name + ' already exists in the database')
         else:
-            header0='Filter name '+filter_name+'\nwavelength(micron) response(arbitrary_units)'
+            header0='Filter name '+filter_name+'\n'
+            header1='Instrument '+instrument+'\n'
+            header2='Central wavelength '+str(np.around(np.median(lambda_array),decimals=1))+' micron'+'\nwavelength(micron) response(arbitrary_units)'
+            HEADER = header0+header1+header2
             np.savetxt(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt',
-                       list(zip(lambda_array,response_array)),header=header0,fmt='%.5e',delimiter=' ',newline='\n')
+                       list(zip(lambda_array,response_array)),header=HEADER,fmt='%.5e',delimiter=' ',newline='\n')
             with open(master_dir+'/Model_SEDs/parfiles/filter_default.dat','ab') as filter_default:
                 np.savetxt(filter_default,[np.array([filter_name,np.around(np.median(lambda_array),decimals=1),instrument],dtype=str)],fmt='%s', delimiter=' ')
 
             print(filter_name+'.txt succesfully saved in '+master_dir+'Model_SEDs/parfiles/')
-
+            
         #For the IDL method we need the convolved fluxes for the new filter in a fits file
         #(this is a translation from the IDL script filtflux.pro)
         #Note that this is not needed for the new method as it convolves on the fly
@@ -1429,9 +1432,12 @@ class SedFitter(object):
         if filter_name+'.txt' in existing_filters:
             print('WARNING! The filter ' + filter_name + ' already exists in the database')
         else:
-            header0='Filter name '+filter_name+'\nwavelength(micron) response(arbitrary_units)'
+            header0='Filter name '+filter_name+'\n'
+            header1='Instrument '+instrument+'\n'
+            header2='Central wavelength '+str(np.around(np.median(lambda_array),decimals=1))+' micron'+'\nwavelength(micron) response(arbitrary_units)'
+            HEADER = header0+header1+header2
             np.savetxt(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt',
-                       list(zip(lambda_array,response_array)),header=header0,fmt='%.5e',delimiter=' ',newline='\n')
+                       list(zip(lambda_array,response_array)),header=HEADER,fmt='%.5e',delimiter=' ',newline='\n')
             with open(master_dir+'/Model_SEDs/parfiles/filter_default.dat','ab') as filter_default:
                 np.savetxt(filter_default,[np.array([filter_name,filter_lambda,instrument],dtype=str)],fmt='%s', delimiter=' ')
 
