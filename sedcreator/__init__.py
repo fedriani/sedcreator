@@ -322,62 +322,85 @@ class SedFluxer:
         #This block is to deal with WISE DN units
         #The first if else is to deal with both WISE images the one downloaded from Skyview and from WISE archive
         if ('TELESCOP' in header) & ('BAND' in header):
-            if ((header['TELESCOP']=='WISE') & (header['BAND']==1)):
-                M_0_inst = 20.752 #mag for W1
-                AC = 0.222 #mag for W1
-                F_nu_0 = 309.540 #Jy
-            elif ((header['TELESCOP']=='WISE') & (header['BAND']==2)):
-                M_0_inst = 19.596 #mag for W2
-                AC = 0.280 #mag for W2
-                F_nu_0 = 171.787 #Jy
-            elif ((header['TELESCOP']=='WISE') & (header['BAND']==3)):
-                M_0_inst = 17.800 #mag for W3
-                AC = 0.665 #mag for W3
-                F_nu_0 = 31.674 #Jy
-            elif ((header['TELESCOP']=='WISE') & (header['BAND']==4)):
-                M_0_inst = 12.945 #mag for W4
-                AC = 0.616 #mag for W4
-                F_nu_0 = 8.363 #Jy
-            else:#TODO: careful here, I am not sure it will work 100%
-                pass #this is to continue in case there is the key in the header but is not a WISE image
+            if header['TELESCOP']=='WISE':
+                if ((header['TELESCOP']=='WISE') & (header['BAND']==1)):
+                    M_0_inst = 20.752 #mag for W1
+                    AC = 0.222 #mag for W1
+                    F_nu_0 = 309.540 #Jy
+                elif ((header['TELESCOP']=='WISE') & (header['BAND']==2)):
+                    M_0_inst = 19.596 #mag for W2
+                    AC = 0.280 #mag for W2
+                    F_nu_0 = 171.787 #Jy
+                elif ((header['TELESCOP']=='WISE') & (header['BAND']==3)):
+                    M_0_inst = 17.800 #mag for W3
+                    AC = 0.665 #mag for W3
+                    F_nu_0 = 31.674 #Jy
+                elif ((header['TELESCOP']=='WISE') & (header['BAND']==4)):
+                    M_0_inst = 12.945 #mag for W4
+                    AC = 0.616 #mag for W4
+                    F_nu_0 = 8.363 #Jy
+                    
+                #magnitude transformation for WISE depending on the above constants (band dependent)
+                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
+                Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
 
-            #magnitude transformation for WISE depending on the above constants (band dependent)
-            Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
-            Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
+                #flux conversion for WISE
+                flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
+                #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
+                flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
 
-            #flux conversion for WISE
-            flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
-            #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
-            flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
+            elif header['TELESCOP']=='SOFIA 2.5m':#To get around HAWC+ data
+                #TODO: careful here, I am not sure it will work 100%.
+                #TEMPORARY FIX to give some value
+                if 'BUNIT' in header:
+                    if header['BUNIT']=='Jy/pix' or header['BUNIT']=='Jy/pixel':
+                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                        flux = ap_phot['aperture_sum'].data[0] #Jy
+                elif 'FUNITS' in header:
+                    if header['FUNITS']=='Jy/pix' or header['FUNITS']=='Jy/pixel':#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                        flux = ap_phot['aperture_sum'].data[0] #Jy
+                else:
+                    raise Exception('Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation')
+                    
+            else:
+                raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
 
-        elif 'SURVEY' in header:#This is when WISE IS considered
-            if header['SURVEY']=='WISE 3.4 micron allWISE release':
-                M_0_inst = 20.752 #mag for W1
-                AC = 0.222 #mag for W1
-                F_nu_0 = 309.540 #Jy
-            elif header['SURVEY']=='WISE 4.6 micron allWISE release':
-                M_0_inst = 19.596 #mag for W2
-                AC = 0.280 #mag for W2
-                F_nu_0 = 171.787 #Jy
-            elif header['SURVEY']=='WISE 12 micron allWISE release':
-                M_0_inst = 17.800 #mag for W3
-                AC = 0.665 #mag for W3
-                F_nu_0 = 31.674 #Jy
-            elif header['SURVEY']=='WISE 22 micron allWISE release':
-                M_0_inst = 12.945 #mag for W4
-                AC = 0.616 #mag for W4
-                F_nu_0 = 8.363 #Jy
-            else:#TODO: careful here, I am not sure it will work 100%
-                pass #this is to continue in case there is the key in the header but is not a WISE image
 
-            #magnitude transformation for WISE depending on the above constants (band dependent)
-            Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
-            Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
+                
+        elif 'SURVEY' in header:#This is when WISE is considered
+            if header['SURVEY']=='WISE 3.4 micron allWISE release' or\
+            header['SURVEY']=='WISE 4.6 micron allWISE release' or\
+            header['SURVEY']=='WISE 12 micron allWISE release' or\
+                header['SURVEY']=='WISE 22 micron allWISE release':
+                if header['SURVEY']=='WISE 3.4 micron allWISE release':
+                    M_0_inst = 20.752 #mag for W1
+                    AC = 0.222 #mag for W1
+                    F_nu_0 = 309.540 #Jy
+                elif header['SURVEY']=='WISE 4.6 micron allWISE release':
+                    M_0_inst = 19.596 #mag for W2
+                    AC = 0.280 #mag for W2
+                    F_nu_0 = 171.787 #Jy
+                elif header['SURVEY']=='WISE 12 micron allWISE release':
+                    M_0_inst = 17.800 #mag for W3
+                    AC = 0.665 #mag for W3
+                    F_nu_0 = 31.674 #Jy
+                elif header['SURVEY']=='WISE 22 micron allWISE release':
+                    M_0_inst = 12.945 #mag for W4
+                    AC = 0.616 #mag for W4
+                    F_nu_0 = 8.363 #Jy
+                #magnitude transformation for WISE depending on the above constants (band dependent)
+                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
+                Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
 
-            #flux conversion for WISE
-            flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
-            #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
-            flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
+                #flux conversion for WISE
+                flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
+                #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
+                flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
+                    
+            else:
+                raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
+
 
         #TODO: deal with Jy and mJy units
         else:
