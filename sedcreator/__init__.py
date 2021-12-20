@@ -105,6 +105,8 @@ class FluxerContainer():
         print('~',round(self.aper_rad_pixel,3),'pixels are used for the aperture radius')
         if 'BUNIT' in header:
             print('units in the image are:', header['BUNIT'])
+        elif 'FUNITS' in header:
+                print('units in the image are:', header['FUNITS'])
         elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
             print('units in the image are:',header['COMMENT'][17])
         else:
@@ -148,7 +150,7 @@ class FluxerContainer():
             print('Flux        ',self.flux, 'unitless')
             print('Background  ',self.flux-self.flux_bkgsub, 'unitless')
             print('############################')
-            print('Please, perform your own units transformation')            
+            print('Please, perform your own units transformation')
         else:
             print('')
 
@@ -191,9 +193,23 @@ class FluxerContainer():
         
         plt.figure()
         plt.subplot(projection=self.wcs_header)
-        #consider only the portion of the image shown for the scale normalisation
-        data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
-                             int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
+        #This is to get around no good stretch for SOFIA images
+        if 'OBSERVAT' in header:
+            if header['OBSERVAT']=='SOFIA':
+                data_for_norm = data
+            else:
+                data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
+                                     int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
+        elif 'TELESCOP' in header:
+            if header['TELESCOP']=='SOFIA 2.5m':
+                data_for_norm = data
+            else:
+                data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
+                                     int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
+        else:
+            data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
+                                 int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
+
         norm = simple_norm(data_for_norm[data_for_norm>0], stretch=stretch, percent=percent)
         plt.imshow(data, cmap=cmap, origin='lower', norm=norm)
         plt.plot(self.x_source,self.y_source,'rx')
@@ -208,6 +224,8 @@ class FluxerContainer():
             cbar_ticks = np.around(np.linspace(norm.vmin,norm.vmax,num=5))
             if 'BUNIT' in header:
                 cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
+            elif 'FUNITS' in header:
+                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['FUNITS']), pad=0.01)
             elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
                 cbar = plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
             else:
@@ -220,7 +238,7 @@ class FluxerContainer():
             plt.savefig(path+'/'+figname,dpi=300,bbox_inches='tight')
             print('Image saved in ',path)
         plt.show()
-        
+
 class SedFluxer:
     
     def __init__(self,image):
@@ -401,7 +419,6 @@ class SedFluxer:
             else:
                 raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
 
-
         #TODO: deal with Jy and mJy units
         else:
             # Mengyao's conversion from MJy/sr to Jy/pixel
@@ -439,6 +456,13 @@ class SedFluxer:
                 if header['FUNITS']=='Jy/pix' or header['FUNITS']=='Jy/pixel':#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
                     flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = ap_phot['aperture_sum'].data[0] #Jy
+                elif header['FUNITS']=='mJy/sq-arc' or header['FUNITS']=='Jy/sq-arc':#This is mainly for SOFIA data
+                    if header['FUNITS']=='mJy/sq-arc':
+                        unit_factor_Jy = 0.001 #from mJy to Jy
+                    else:
+                        unit_factor_Jy = 1.0 #leave it in Jy
+                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale**2 #Jy
+                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]*pixel_scale**2 #Jy
                 else:
                     raise Exception('FUNITS (',header['FUNITS'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
             else:
@@ -530,7 +554,7 @@ class SedFluxer:
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
                  aperture=aperture,annulus_aperture=annulus_aperture,flux_method='get_raw_flux')
-
+    
     def get_optimal_aperture(self,central_coords,ap_inner=5.0,ap_outer=60.0,aper_increase=1.3,threshold=1.1,profile_plot=False):
         '''
         Finds the optimal aperture based on the following method:
@@ -578,20 +602,28 @@ class SedFluxer:
 
 
         for radius in APER_RAD:
-            flux_bkg, flux = self.get_flux(central_coords=central_coords,
-                                           aper_rad=radius,
-                                           inner_annu=1.0*radius,
-                                           outer_annu=2.0*radius).value
+            try:
+                flux_bkg, flux = self.get_flux(central_coords=central_coords,
+                                               aper_rad=radius,
+                                               inner_annu=1.0*radius,
+                                               outer_annu=2.0*radius).value
+                unit = 1 # to consider Jy in label
+            except:
+                flux_bkg, flux = self.get_raw_flux(central_coords=central_coords,
+                                               aper_rad=radius,
+                                               inner_annu=1.0*radius,
+                                               outer_annu=2.0*radius).value
+                unit = 0 # to consider Jy in label
+                
             FLUX_BKG.append(flux_bkg)
             FLUX.append(flux)
-
 
 
         x = np.copy(APER_RAD)
         y = np.copy(FLUX_BKG)
 
         for i in range(len(x)-1):
-            #ideal radius is the radius 30% past the current radius
+            #ideal radius is the radius aper_increase (default 30%) past the current radius
             ideal_radius = aper_increase*x[i]
             #closest_radius_ind is the index of the radius we have sampled closest to this ideal
             closest_radius_ind = np.argmin(np.abs(x - ideal_radius))
@@ -606,16 +638,18 @@ class SedFluxer:
 
             plt.figure()
             plt.plot(x, y,'ro', markersize=2.5, label="Bkg-sub flux")
-            #plt.plot(x, FLUX,'bo', markersize=2.5, label="Non-bkg-sub flux")
+#             plt.plot(x, FLUX,'bo', markersize=2.5, label="Non-bkg-sub flux")
 
             plt.axvline(x=opt_rad, color="black", label="Optimal Aperture")
             plt.xlabel("Aperture radius (arcsec)",  fontsize=14)
-            plt.ylabel('Flux (Jy)', fontsize=14)
+            if unit:
+                plt.ylabel('Flux (Jy)', fontsize=14)
+            else:
+                plt.ylabel('Flux (unitless)', fontsize=14)
             plt.legend()
             plt.show()
 
         return opt_rad
-
 
 class FitterContainer():
     '''
