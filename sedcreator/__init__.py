@@ -2107,7 +2107,7 @@ class ModelPlotter(FitterContainer):
         #to go out of the figure define a false 0.5 error for those marked as upper limit
         error_flux_for_SED_plot = self.err_flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
-        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=self.err_flux_array*source_nu_Fnu,fmt=marker,
+        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,
                      uplims=self.upper_limit_array)
         plt.xlim(xlim)
         plt.ylim(ylim)
