@@ -43,7 +43,7 @@ class FluxerContainer():
     def __init__(self,data=None,flux_bkgsub=None,flux=None,
                  central_coords=None,aper_rad=None,inner_annu=None,outer_annu=None,
                  x_source=None,y_source=None,aper_rad_pixel=None,wcs_header= None,
-                 aperture=None,annulus_aperture=None,flux_method=None):
+                 aperture=None,annulus_aperture=None,mask=None,flux_method=None):
         self.data = data
         self.flux_bkgsub = flux_bkgsub
         self.flux = flux
@@ -57,6 +57,7 @@ class FluxerContainer():
         self.wcs_header = wcs_header
         self.aperture = aperture
         self.annulus_aperture = annulus_aperture
+        self.mask = mask
         self.flux_method = flux_method
         self.__value = None
         self.__info = None
@@ -158,7 +159,7 @@ class FluxerContainer():
             print('')
 
         
-    def plot(self,cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',title=None,path=None,figname='image_with_aperture.pdf'):
+    def plot(self,cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',plot_mask=False,title=None,path=None,figname='image_with_aperture.pdf'):
         '''
         Plots the used image together with the aperture used for the flux
         and the annulus for the background subtraction.
@@ -180,8 +181,11 @@ class FluxerContainer():
         annulus_color: str
                     Annulus aperture color to show in the image. Default is 'red'
 
+        plot_mask: bool, optional
+                    Plots the mask used in when getting the flux. Default is False
+                    
         title: str, optional
-                    Seet title for the image. Default is None
+                    Set title for the image. Default is None
 
         path: str, optional
                     Path to save the figure. Default is None
@@ -193,18 +197,19 @@ class FluxerContainer():
         
         #reading the data
         data,header = self.data
+        mask = self.mask
         
         plt.figure()
         plt.subplot(projection=self.wcs_header)
         #This is to get around no good stretch for SOFIA images
         if 'OBSERVAT' in header:
-            if header['OBSERVAT']=='SOFIA':
+            if 'SOFIA' in header['OBSERVAT']:
                 data_for_norm = data
             else:
                 data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
                                      int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
         elif 'TELESCOP' in header:
-            if header['TELESCOP']=='SOFIA 2.5m':
+            if 'SOFIA 2.5m' in header['TELESCOP']:
                 data_for_norm = data
             else:
                 data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
@@ -221,7 +226,7 @@ class FluxerContainer():
         plt.xlabel('RA (J2000)')
         plt.ylabel('Dec (J2000)')
         self.aperture.plot(color=aperture_color)
-        self.annulus_aperture.plot(color=annulus_color)
+        self.annulus_aperture.plot(color=annulus_color,ls='--')
         
         if colorbar:
             cbar_ticks = np.around(np.linspace(norm.vmin,norm.vmax,num=5))
@@ -237,6 +242,13 @@ class FluxerContainer():
             cbar.set_ticklabels(cbar_ticks)
         if title is not None:
             plt.title(title)
+            
+        if plot_mask==True:
+            mask_to_plot = np.array(mask,dtype=int)
+            mask_cmap = plt.cm.Reds_r
+            mask_cmap.set_bad(color='white',alpha=0)
+            plt.imshow(mask,vmin=0,vmax=1,cmap=mask_cmap,alpha=0.1)
+            
         if path is not None:
             plt.savefig(path+'/'+figname,dpi=300,bbox_inches='tight')
             print('Image saved in ',path)
@@ -271,7 +283,7 @@ class SedFluxer:
         return(data,header)
         
         
-    def get_flux(self,central_coords,aper_rad,inner_annu,outer_annu):
+    def get_flux(self,central_coords,aper_rad,inner_annu,outer_annu,mask=None):
         '''
         Performs circular aperture photometry for a given image, specifying the central coordinates and
         the aperture radius. It returns the background subtracted flux and the flux including the background in units of Jy.
@@ -299,6 +311,10 @@ class SedFluxer:
         outer_annu: float
                 Outer annulus radius given in arcsec. The script will take care to convert it into pixels.
                 Usually this is set to 2*aper_rad.
+                
+        mask: 2D array bool or int
+                mask with the same shape of the image where the flux wants to be calculated.
+                True values (or 1) will be ignore in the aperture_photometry.
 
         Returns
         -------
@@ -335,13 +351,13 @@ class SedFluxer:
 
         error = 0.1*data
         bkg_median = []
-        for mask in annulus_masks:
-            annulus_data = mask.multiply(data)
-            annulus_data_1d = annulus_data[mask.data > 0]
+        for annu_mask in annulus_masks:
+            annulus_data = annu_mask.multiply(data)
+            annulus_data_1d = annulus_data[annu_mask.data > 0]
             _, median_sigclip, _ = sigma_clipped_stats(annulus_data_1d)
             bkg_median.append(median_sigclip)
         bkg_median = np.array(bkg_median)
-        ap_phot = aperture_photometry(data, aperture,error=error) #circular aperture sum
+        ap_phot = aperture_photometry(data, aperture,error=error,mask=mask) #circular aperture sum
         ap_phot['annulus_median'] = bkg_median
         ap_phot['aper_bkg'] = bkg_median * aperture.area #consider a median value for the background subtraction
         ap_phot['aper_sum_bkgsub'] = ap_phot['aperture_sum'] - ap_phot['aper_bkg'] #subtracting the background
@@ -377,17 +393,25 @@ class SedFluxer:
                 #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
                 flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
 
-            elif header['TELESCOP']=='SOFIA 2.5m':#To get around HAWC+ data
+            elif 'SOFIA 2.5m' in header['TELESCOP']:#To get around HAWC+ data
                 #TODO: careful here, I am not sure it will work 100%.
                 #TEMPORARY FIX to give some value
                 if 'BUNIT' in header:
-                    if header['BUNIT']=='Jy/pix' or header['BUNIT']=='Jy/pixel':
-                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                        flux = ap_phot['aperture_sum'].data[0] #Jy
+                    if 'Jy/pix' in header['BUNIT']:
+                        if 'mJy/pix' in header['BUNIT']:
+                            unit_factor_Jy = 0.001 #from mJy to Jy
+                        else:
+                            unit_factor_Jy = 1.0 #leave it in Jy
+                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
                 elif 'FUNITS' in header:
-                    if header['FUNITS']=='Jy/pix' or header['FUNITS']=='Jy/pixel':#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
-                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                        flux = ap_phot['aperture_sum'].data[0] #Jy
+                    if 'Jy/pix' in header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                        if 'mJy/pix' in header['FUNITS']:
+                            unit_factor_Jy = 0.001 #from mJy to Jy
+                        else:
+                            unit_factor_Jy = 1.0 #leave it in Jy
+                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
                 else:
                     raise Exception('Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation')
                     
@@ -395,7 +419,7 @@ class SedFluxer:
                 raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
 
 
-                
+
         elif 'SURVEY' in header:#This is when WISE is considered
             if header['SURVEY']=='WISE 3.4 micron allWISE release' or\
             header['SURVEY']=='WISE 4.6 micron allWISE release' or\
@@ -433,7 +457,7 @@ class SedFluxer:
         else:
             # Mengyao's conversion from MJy/sr to Jy/pixel
             if 'BUNIT' in header:
-                if header['BUNIT']=='MJy/sr' or header['BUNIT']=='MJY/SR': #mainly for Herschel and some Spitzer data (and IRAS)
+                if 'MJy/sr' in header['BUNIT'] or 'MJY/SR' in header['BUNIT']: #mainly for Herschel and some Spitzer data (and IRAS)
                     if 'CD1_1' in header:
                         flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
                         flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
@@ -442,9 +466,9 @@ class SedFluxer:
                         flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
                     else:
                         raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
-                elif header['BUNIT']=='Jy/beam' or header['BUNIT']=='mJy/beam':#mainly for ALMA data or some other radio data
+                elif 'Jy/beam' in header['BUNIT']:#mainly for ALMA data or some other radio data
                     beam = np.pi/(4.0*np.log(2.0))*header['BMAJ']*header['BMIN']
-                    if header['BUNIT']=='mJy/beam':
+                    if 'mJy/beam' in header['BUNIT']:
                         unit_factor_Jy = 0.001 #from mJy to Jy
                     else:
                         unit_factor_Jy = 1.0 #leave it in Jy
@@ -456,18 +480,26 @@ class SedFluxer:
                         flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
                     else:
                         raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
-                elif header['BUNIT']=='Jy/pix' or header['BUNIT']=='Jy/pixel':
-                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                    flux = ap_phot['aperture_sum'].data[0] #Jy
+                elif 'Jy/pix' in header['BUNIT']:
+                    if 'mJy/pix' in header['BUNIT']:
+                        unit_factor_Jy = 0.001 #from mJy to Jy
+                    else:
+                        unit_factor_Jy = 1.0 #leave it in Jy
+                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
                 else:
                     raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
             #TODO: add mJy/pix here!
             elif 'FUNITS' in header:
-                if header['FUNITS']=='Jy/pix' or header['FUNITS']=='Jy/pixel':#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
-                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                    flux = ap_phot['aperture_sum'].data[0] #Jy
-                elif header['FUNITS']=='mJy/sq-arc' or header['FUNITS']=='Jy/sq-arc':#This is mainly for SOFIA data
-                    if header['FUNITS']=='mJy/sq-arc':
+                if 'Jy/pix' in header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                    if 'mJy/pix' in header['FUNITS']:
+                        unit_factor_Jy = 0.001 #from mJy to Jy
+                    else:
+                        unit_factor_Jy = 1.0 #leave it in Jy
+                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
+                elif 'Jy/sq-arc' in header['FUNITS']:#This is mainly for SOFIA data
+                    if 'mJy/sq-arc' in header['FUNITS']:
                         unit_factor_Jy = 0.001 #from mJy to Jy
                     else:
                         unit_factor_Jy = 1.0 #leave it in Jy
@@ -482,9 +514,9 @@ class SedFluxer:
         return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
-                 aperture=aperture,annulus_aperture=annulus_aperture,flux_method='get_flux')
+                 aperture=aperture,annulus_aperture=annulus_aperture,mask=mask,flux_method='get_flux')
 
-    def get_raw_flux(self,central_coords,aper_rad,inner_annu,outer_annu):
+    def get_raw_flux(self,central_coords,aper_rad,inner_annu,outer_annu,mask=None):
         '''
         Performs circular aperture photometry for a given image, specifying the central coordinates and
         the aperture radius. It returns the background subtracted flux and the flux including the background without
@@ -508,6 +540,10 @@ class SedFluxer:
         outer_annu: float
                 Outer annulus radius given in arcsec. The script will take care to convert it into pixels.
                 Usually this is set to 2*aper_rad.
+
+        mask: 2D array bool or int
+                mask with the same shape of the image where the flux wants to be calculated.
+                True values (or 1) will be ignore in the aperture_photometry.
 
         Returns
         -------
@@ -544,13 +580,13 @@ class SedFluxer:
 
         error = 0.1*data
         bkg_median = []
-        for mask in annulus_masks:
-            annulus_data = mask.multiply(data)
-            annulus_data_1d = annulus_data[mask.data > 0]
+        for annu_mask in annulus_masks:
+            annulus_data = annu_mask.multiply(data)
+            annulus_data_1d = annulus_data[annu_mask.data > 0]
             _, median_sigclip, _ = sigma_clipped_stats(annulus_data_1d)
             bkg_median.append(median_sigclip)
         bkg_median = np.array(bkg_median)
-        ap_phot = aperture_photometry(data, aperture,error=error) #circular aperture sum
+        ap_phot = aperture_photometry(data, aperture,error=error,mask=mask) #circular aperture sum
         ap_phot['annulus_median'] = bkg_median
         ap_phot['aper_bkg'] = bkg_median * aperture.area #consider a median value for the background subtraction
         ap_phot['aper_sum_bkgsub'] = ap_phot['aperture_sum'] - ap_phot['aper_bkg'] #subtracting the background
@@ -563,9 +599,9 @@ class SedFluxer:
         return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
-                 aperture=aperture,annulus_aperture=annulus_aperture,flux_method='get_raw_flux')
+                 aperture=aperture,annulus_aperture=annulus_aperture,mask=mask,flux_method='get_raw_flux')
     
-    def get_optimal_aperture(self,central_coords,ap_inner=5.0,ap_outer=60.0,aper_increase=1.3,threshold=1.1,profile_plot=False):
+    def get_optimal_aperture(self,central_coords,ap_inner=5.0,ap_outer=60.0,step_size=0.25,aper_increase=1.3,threshold=1.1,profile_plot=False):
         '''
         Finds the optimal aperture based on the following method:
         EXPLAIN METHOD.
@@ -586,6 +622,8 @@ class SedFluxer:
         ap_outer: float
                 Outer aperture radius given in arcsec. The script will take care to convert it into pixels.
                 It the ending point to find the optimal aperture. Default is 60.0 arcsec.
+        step_size: float
+                Step size for sampling aperture radii. Default is 0.25arcsec
         aper_increase: float
             It is the increase in aperture to meet the condition
             aper_increase*optimal radius <= flux at opt.rad. * threshold. Default is 1.30, i.e. 30% increase in aperture.
@@ -606,9 +644,8 @@ class SedFluxer:
 
 
         #Step size for sampling aperture radii
-        step = 0.25
         #Sample aperture radii
-        APER_RAD = np.arange(ap_inner, ap_outer, step)#arcsec
+        APER_RAD = np.arange(ap_inner, ap_outer, step_size)#arcsec
 
 
         for radius in APER_RAD:
