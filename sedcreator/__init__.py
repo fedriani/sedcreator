@@ -1791,7 +1791,7 @@ class SedFitter(object):
                     else:
                         average_model_table_chisq = average_model_table_chisq
                 else:
-                    raise ValueError('Method must be either liu, moser or None')                
+                    raise ValueError('Method must be either liu, moser or None')
             
             number_of_models = len(average_model_table_chisq)
             
@@ -1844,7 +1844,7 @@ class SedFitter(object):
                     else:
                         average_model_table_rcore = average_model_table_rcore
                 else:
-                    raise ValueError('Method must be either liu, moser or None')                
+                    raise ValueError('Method must be either liu, moser or None')
             
             number_of_models = len(average_model_table_rcore)
             
@@ -1869,7 +1869,7 @@ class SedFitter(object):
                            gmean(average_model_table_rcore['lbol_av']),gstd(average_model_table_rcore['lbol_av']),
                            gmean(average_model_table_rcore['t_now']),gstd(average_model_table_rcore['t_now'])],dtype=object)
                     
-            final_average_table.add_row(vals=data)        
+            final_average_table.add_row(vals=data)
 
 
         elif chisq_cut is not None and core_radius_cut is not None:
@@ -1897,7 +1897,7 @@ class SedFitter(object):
                     else:
                         average_model_table_chisq_rcore = average_model_table_chisq_rcore
                 else:
-                    raise ValueError('Method must be either liu, moser or None')                
+                    raise ValueError('Method must be either liu, moser or None')
             
             number_of_models = len(average_model_table_chisq_rcore)
             
@@ -1969,7 +1969,7 @@ class SedFitter(object):
         
         if path is not None:
             ascii.write(final_average_table,path+'/'+tablename)
-            print('Table saved in ',path)    
+            print('Table saved in ',path)
             
         return(final_average_table)
 
@@ -2315,6 +2315,8 @@ class ModelPlotter(FitterContainer):
         ax1.set_xticklabels([10.0,40.0,120.0,480.0])
         ax1.set_yticklabels(np.unique(models['sigma']))
 
+        ax1.minorticks_off()#turning off minor ticks
+        
         ax1.set_xlabel(r'$M_\mathrm{c}\,(M_\odot)$')
         ax1.set_ylabel(r'$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$')
 
@@ -2366,6 +2368,8 @@ class ModelPlotter(FitterContainer):
         ax2.set_xticklabels([10.0,40.0,120.0,480.0])
         ax2.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
 
+        ax2.minorticks_off()#turning off minor ticks
+        
         ax2.set_xlabel(r'$M_\mathrm{c}\,(M_\odot)$')
         ax2.set_ylabel(r'$m_*\,(M_\odot)$')
 
@@ -2417,16 +2421,18 @@ class ModelPlotter(FitterContainer):
 
         ax3.set_xticklabels(np.unique(models['sigma']))
         ax3.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
+        
+        ax3.minorticks_off()#turning off minor ticks
 
         ax3.set_xlabel(r'$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$')
         ax3.set_ylabel(r'$m_*\,(M_\odot)$')
 
         ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
 
-        cbar = fig.colorbar(sct3,label=r'$\chi^2$',shrink=0.41,pad=0.005,orientation='vertical',ax=axs)
+        cbar = fig.colorbar(sct3,label=r'$\chi^2$',shrink=0.36,pad=0.01,orientation='vertical',ax=axs)
         cbar.set_ticks([triple_sigma_ms['chisq'].min(),5,10,50,triple_sigma_ms['chisq'].max()])
         cbar.set_ticklabels([np.around(triple_sigma_ms['chisq'].min(),decimals=1),5,10,50,np.around(triple_sigma_ms['chisq'].max(),decimals=1)])
-
+        
         if title is not None:
             fig.suptitle(title,y=0.8)
             
