@@ -37,6 +37,9 @@ c_micron_s = c.to(u.micron*u.s**-1).value
 Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 
 class FluxerContainer():
+    '''
+    A class to store the results from the SedFluxer class
+    '''
     def __init__(self,data=None,flux_bkgsub=None,flux=None,
                  central_coords=None,aper_rad=None,inner_annu=None,outer_annu=None,
                  x_source=None,y_source=None,aper_rad_pixel=None,wcs_header= None,
@@ -240,7 +243,14 @@ class FluxerContainer():
         plt.show()
 
 class SedFluxer:
+    '''
+    A class used to measure flux
     
+    Attributes
+    ----------
+    get_data: function
+        Get the data to measure flux
+    '''
     def __init__(self,image):
         self.image = image
         self.data = self.get_data()
@@ -654,11 +664,6 @@ class SedFluxer:
 class FitterContainer():
     '''
     A class to store the results from the SedFluxer class
-    
-    Attributes
-    ----------
-    get_model_info: `astropy.table`
-        Gets the model information from the results of the SED fit
     '''
     
     def __init__(self,models,master_dir="./",extinction_law="kmh",
@@ -873,13 +878,7 @@ class FitterContainer():
 class SedFitter(object):
     '''
     A class used to fit the SED model grid
-    
-    Attributes
-    ----------
-    sed_fit: method
-        Fits the SED observations to the Z&T18 set of models
     '''
-    
     def __init__(self, extc_law=None,
                  lambda_array=None,
                  flux_array=None,
@@ -937,9 +936,9 @@ class SedFitter(object):
         return 0
     
     def get_norm_extinction_law(self,extc_law='kmh'):
-        """
+        '''
         Computes the normalised extinction law based on the extc_law file
-        """
+        '''
         
         # available_ext = Utilities.get_available_ext_law()
         # if extc_law not in available_ext:
@@ -1117,7 +1116,7 @@ class SedFitter(object):
             
         Returns
         ----------
-        FitterContainer: class with needed information to use the functions. ****COMPLETE!
+        FitterContainer: class with needed information to use the functions. COMPLETE!
         '''
         
         if method not in ('grid_search', 'idl', 'minimize'):
@@ -1618,7 +1617,7 @@ class SedFitter(object):
         col_names = np.array(['SED_number', 'chisq', 'chisq_nonlim', 'mcore', 'sigma', 'mstar', 'theta_view', 'dist', 'av', 'rcore', 'massenv', 'theta_w_esc',
                        'rstar', 'lstar', 'tstar', 'mdisk', 'rdisk', 'mdotd', 'lbol', 'lbol_iso', 'lbol_av', 't_now'])
 
-        col_latex_names = np.array(['SED_number','$\chi^2$','$\chi^2_\mathrm{nonlimit}$','$M_\mathrm{c}$','$\Sigma$','$m_*$','$\\theta_\mathrm{view}$','$d$','$A_V$',
+        col_latex_names = np.array(['SED_number','$\chi^2$','$\chi^2_\mathrm{nonlimit}$','$M_\mathrm{c}$','$\Sigma_\mathrm{cl}$','$m_*$','$\\theta_\mathrm{view}$','$d$','$A_V$',
                      '$R_\mathrm{core}$','$M_\mathrm{env}$','$\\theta_\mathrm{w,esc}$','$R_*$', '$L_*$', '$T_*$', '$m_\mathrm{disk}$', '$r_\mathrm{disk}$',
                      '$\dot{M}_\mathrm{disk}$','$L_\mathrm{bol}$','$L_\mathrm{bol,iso}$','$L_\mathrm{bol,av}$','$t_\mathrm{now}$'])
 
@@ -2030,20 +2029,6 @@ class PentagonPlot(object):
 class ModelPlotter(FitterContainer):
     '''
     A class used to plot the SED model results
-    
-    Attributes
-    ----------
-    plot_best_sed: method
-        Plots the best SED model
-        
-    plot_multiple_seds: method
-        Plot multiple SEDs
-        
-    plot2d: method
-        Plots the 2D parameters space of the three main physical parameters (M_c, sigma, m_*).
-
-    plot3d: method
-        Plots the 3D parameters space of the three main physical parameters (M_c, sigma, m_*).
     '''
         
     def __init__(self,fittercontainer):
@@ -2444,7 +2429,6 @@ class ModelPlotter(FitterContainer):
         Returns
         ----------
         plot the 3D results
-        
         '''
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111, projection='3d')
