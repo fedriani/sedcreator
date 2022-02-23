@@ -114,7 +114,7 @@ class FluxerContainer():
         elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
             print('units in the image are:',header['COMMENT'][17])
         else:
-            print('No BUNIT key in the header')
+            print('No BUNIT nor FUNITS key in the header')
 
         #to print the observing time
         #I add this to know the date in case we are interested in variable sources
@@ -138,6 +138,17 @@ class FluxerContainer():
             print('Wavelength:',header['FILTER'])
         elif 'SURVEY' in header:
             print('Wavelength:',header['SURVEY'])
+        #TODO: make sure the below works for other images
+        #workaround to also print wavelengths in Spitzer IRAC cases
+        elif 'CHNLNUM' in header:
+            if header['CHNLNUM']==1:
+                print('Wavelength:',3.6)
+            if header['CHNLNUM']==2:
+                print('Wavelength:',4.5)
+            if header['CHNLNUM']==3:
+                print('Wavelength:',5.8)
+            if header['CHNLNUM']==4:
+                print('Wavelength:',8.0)
         else:
             print('Regarding wavelength:\nYou are probably using HERSCHEL or ALMA, look at the first extension of the header')
 
@@ -159,7 +170,7 @@ class FluxerContainer():
             print('')
 
         
-    def plot(self,cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',plot_mask=False,title=None,path=None,figname='image_with_aperture.pdf'):
+    def plot(self,cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',plot_mask=False,title=None,figname=None):
         '''
         Plots the used image together with the aperture used for the flux
         and the annulus for the background subtraction.
@@ -187,12 +198,11 @@ class FluxerContainer():
         title: str, optional
                     Set title for the image. Default is None
 
-        path: str, optional
-                    Path to save the figure. Default is None
-
         figname: str, optional
-                    Name of the figure. Default is 'image_with_aperture.pdf'.
-                    Note that one can choose the format of the figure by changing the extension.
+                    A path, or a Python file-like object. Note that fname is used verbatim,
+                    and there is no attempt to make the extension. Default is None.
+                    Note that one can choose the format of the figure by changing the extension,
+                    e.g., figure.pdf would generate the figure in PDF format.
         '''
         
         #reading the data
@@ -223,10 +233,15 @@ class FluxerContainer():
         plt.plot(self.x_source,self.y_source,'rx')
         plt.xlim(self.x_source-5.0*self.aper_rad_pixel,self.x_source+5.0*self.aper_rad_pixel)
         plt.ylim(self.y_source-5.0*self.aper_rad_pixel,self.y_source+5.0*self.aper_rad_pixel)
-        plt.xlabel('RA (J2000)')
-        plt.ylabel('Dec (J2000)')
         self.aperture.plot(color=aperture_color)
         self.annulus_aperture.plot(color=annulus_color,ls='--')
+        #in case we are dealing with galactic coordinates
+        if 'GLON' in self.wcs_header.axis_type_names or 'glon' in self.wcs_header.axis_type_names:
+            plt.xlabel('GLON')
+            plt.ylabel('GLAT')
+        else:
+            plt.xlabel('RA (J2000)')
+            plt.ylabel('Dec (J2000)')
         
         if colorbar:
             cbar_ticks = np.around(np.linspace(norm.vmin,norm.vmax,num=5))
@@ -243,15 +258,15 @@ class FluxerContainer():
         if title is not None:
             plt.title(title)
             
-        if plot_mask==True:
+        if plot_mask:
             mask_to_plot = np.array(mask,dtype=int)
             mask_cmap = plt.cm.Reds_r
             mask_cmap.set_bad(color='white',alpha=0)
             plt.imshow(mask,vmin=0,vmax=1,cmap=mask_cmap,alpha=0.1)
             
-        if path is not None:
-            plt.savefig(path+'/'+figname,dpi=300,bbox_inches='tight')
-            print('Image saved in ',path)
+        if figname is not None:
+            plt.savefig(figname,dpi=300,bbox_inches='tight')
+            print('Image saved in ',figname)
         plt.show()
 
 class SedFluxer:
@@ -613,25 +628,34 @@ class SedFluxer:
         ----------
         image: fits file
             Image for which we would like to calculate the "optimal" aperture radius
+            
         central_coords: `astropy.coordinates.SkyCoord`
                     Central coordinates where the apertures will be centred on the data image.
                     This must be a SkyCoord statement.
+                    
         ap_inner: float
                 Inner aperture radius given in arcsec. The script will take care to convert it into pixels.
                 It the starting point to find the optimal aperture. Default is 5.0 arcsec.
+                
         ap_outer: float
                 Outer aperture radius given in arcsec. The script will take care to convert it into pixels.
                 It the ending point to find the optimal aperture. Default is 60.0 arcsec.
+                
         step_size: float
                 Step size for sampling aperture radii. Default is 0.25arcsec
+                
         aper_increase: float
             It is the increase in aperture to meet the condition
-            aper_increase*optimal radius <= flux at opt.rad. * threshold. Default is 1.30, i.e. 30% increase in aperture.
+            aper_increase*optimal radius <= flux at opt.rad. * threshold.
+            Default is 1.30, i.e. 30% increase in aperture.
+            
         threshold: float
             It is the condition to be met such as, at the optimal aperture radius,
             1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.08, i.e. 10% increase in flux.
+            
         profile_plot: bool
             Plots the flux profile versus the aperture radius size. Default is False
+            
         Returns
         -------
         opt_rad: float
@@ -697,7 +721,7 @@ class SedFluxer:
             plt.show()
 
         return opt_rad
-
+        
 class FitterContainer():
     '''
     A class to store the results from the SedFluxer class
@@ -730,7 +754,7 @@ class FitterContainer():
         return mc,sigma,mstar,theta_view
 
     #TODO: Change mu variable by theta or theta_view
-    def get_model_info(self,keys=['mcore','sigma','mstar','theta_view'],path=None,tablename='model_info.dat'):
+    def get_model_info(self,keys=['mcore','sigma','mstar','theta_view'],tablename=None):
         '''
         Gets the model information from the results of the SED fit. Automatically sorts the results by chisq.
         Columns units are given as `astropy.units`
@@ -743,11 +767,9 @@ class FitterContainer():
             ['mcore','sigma','mstar','theta_view'] for the 8640 models in cluding the viewing angle
             Default is ['mcore','sigma','mstar','theta_view']
 
-        path: str, optional
-            Path to save the table. Default is None
-
         tablename: str, optional
-            Name of the table. Default is 'model_info.dat'.
+            A path, or a Python file-like object. Note that fname is used verbatim,
+            and there is no attempt to make the extension. Default is None.
             Note that one can choose the format of the table by changing the extension.
                     
         Returns
@@ -863,9 +885,9 @@ class FitterContainer():
         table_model_unique['lbol_av'].info.format = '%.5e'
         table_model_unique['t_now'].info.format = '%.5e'
         
-        if path is not None:
-            ascii.write(table_model_unique,path+'/'+tablename)
-            print('Table saved in ',path)
+        if tablename is not None:
+            ascii.write(table_model_unique,tablename)
+            print('Table saved in ',tablename)
         
         return(table_model_unique)
 
@@ -1585,7 +1607,7 @@ class SedFitter(object):
             pyfits.writeto(master_dir+'Model_SEDs/flux_filt/'+filter_name+'.fits',flux_model_conv)
 
 
-    def plot_filter(self,filter_name,figsize=(6,4),title=None,path=None,figname='filter_response.pdf'):
+    def plot_filter(self,filter_name,figsize=(6,4),legend=False,title=None,figname=None):
         '''
         Plots a filter in the database. To see the available filter use SedFitter().print_default_filters
         
@@ -1595,10 +1617,17 @@ class SedFitter(object):
                 array of strings with the name of the filter.
                 E.g. if one filter is given ['filter1'],
                 if two filters (or more) are given ['filter1','filter2']
+        legend: bool, optional
+                set the legend with the name of the filter. Default is False.
+        figname: str, optional
+                A path, or a Python file-like object. Note that fname is used verbatim,
+                and there is no attempt to make the extension. Default is None.
+                Note that one can choose the format of the figure by changing the extension,
+                e.g., figure.pdf would generate the figure in PDF format.
             
         Returns
         ----------
-        None
+        A figure with the normalised response for the given filter_name
         '''
         
         master_dir = self.master_dir
@@ -1610,21 +1639,24 @@ class SedFitter(object):
         for filt in filter_name:
             if filt+'.txt' in existing_filters:
                 lambda_array,response_array = np.loadtxt(master_dir+'/Model_SEDs/parfiles/'+filt+'.txt',unpack=True)
+                plt.step(lambda_array,response_array/np.max(response_array),label=filt)
             else:
                 print('WARNING! The filter ' + filt + ' is not in the database')
+                return()
                 
-            plt.step(lambda_array,response_array)
         plt.xlabel('$\lambda\,(\mu\mathrm{m})$')
         plt.ylabel('Filter Response (arbitrary units)')
+        if legend:
+            plt.legend()
         if title is not None:
             plt.title(title)
-        if path is not None:
-            plt.savefig(path+'/'+figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',path)
+        if figname is not None:
+            plt.savefig(figname, dpi=300, bbox_inches="tight")
+            print('Image saved in ',figname)
         plt.show()
 
 
-    def table2latex(self,table,keys=['chisq','mcore','sigma','rcore','mstar','theta_view','av','massenv','theta_w_esc','mdotd','lbol_iso','lbol'],path='./',tablename='results_table_latex.txt'):
+    def table2latex(self,table,keys=['chisq','mcore','sigma','rcore','mstar','theta_view','av','massenv','theta_w_esc','mdotd','lbol_iso','lbol'],tablename=None):
         '''
         Outputs the astropy table into a latex table given the keys properly
         formatted and with the correct units
@@ -1637,12 +1669,11 @@ class SedFitter(object):
         keys: str array
             Array with the keys that wants to be used.
             Default is keys=['chisq','mcore','sigma','rcore','mstar','theta_view','av','massenv','theta_w_esc','mdotd','lbol_iso','lbol']
-
-        path: str
-            path to save the table. Default is './'
-                
+                    
         tablename: str
-                Name of the table. Default is 'results_table_latex.txt'
+            A path, or a Python file-like object. Note that fname is used verbatim,
+            and there is no attempt to make the extension. Default is None.
+            Note that one can choose the format of the figure by changing the extension.
             
         Returns
         ----------
@@ -1672,16 +1703,19 @@ class SedFitter(object):
                                             latex_formats_table[keys].as_array()[0]):
             formats_dict[name_value] = format_value
 
-        if path is not None:
+        if tablename is not None:
             ascii.write(table[keys],
                         format='latex',
                         formats=formats_dict,
                         names=list(latex_names_table[keys].as_array()[0]),
-                        output=path+'/'+tablename)
+                        output=tablename)
+        else:
+            print('Please, set tablename to a str to save the table, including the name of the table and extension, e.g., table.txt')
+        
         return
 
 
-    def get_average_model(self,models,number_of_models=5,chisq_cut=None,core_radius_cut=None,method=None,path=None,tablename='average_models.dat'):
+    def get_average_model(self,models,number_of_models=5,chisq_cut=None,core_radius_cut=None,method=None,tablename=None):
         '''
         Get the average model by means of calculating the geometric mean
         for all parameters except for av, theta_view, and theta_w_esc from which arithmetic mean is calculated
@@ -1714,12 +1748,10 @@ class SedFitter(object):
             The chis2 and core radius conditions have to be given as usual.
             The method only takes the best 5 (or 10) OR FEWER models satisfying the condition.
 
-        path: str, optional
-            Path to save the table. Default is None
-
         tablename: str, optional
-            Name of the table. Default is 'model_info.dat'.
-            Note that one can choose the format of the table by changing the extension.
+            A path, or a Python file-like object. Note that fname is used verbatim,
+            and there is no attempt to make the extension. Default is None.
+            Note that one can choose the format of the figure by changing the extension.
                     
         Returns
         ----------
@@ -1967,9 +1999,9 @@ class SedFitter(object):
         final_average_table['Dt_now'].info.format = '%.5f'
 
         
-        if path is not None:
-            ascii.write(final_average_table,path+'/'+tablename)
-            print('Table saved in ',path)
+        if tablename is not None:
+            ascii.write(final_average_table,tablename)
+            print('Table saved in ',tablename)
             
         return(final_average_table)
 
@@ -2021,7 +2053,14 @@ class PentagonPlot(object):
         self.ax.fill(angle, values, alpha=0.1)
         
     #TODO: find out why when putting self in pentagon_plot it does not work
-    def plot(models,path=None,figname='pentagon_plot.pdf'):
+    def plot(models,figname=None):
+        '''
+        figname: str, optional
+                    A path, or a Python file-like object. Note that fname is used verbatim,
+                    and there is no attempt to make the extension. Default is None.
+                    Note that one can choose the format of the figure by changing the extension,
+                    e.g., figure.pdf would generate the figure in PDF format.
+        '''
         
         models_phm = models['mcore','sigma','mstar','theta_view','av']
         models_chisq = models['chisq']
@@ -2059,8 +2098,8 @@ class PentagonPlot(object):
 
         fig = plt.gcf()
         fig.set_size_inches(5, 5, forward=True)
-        if path is not None:
-            plt.savefig(path+'/'+figname, dpi=300, bbox_inches="tight", pad_inches=1)
+        if figname is not None:
+            plt.savefig(figname, dpi=300, bbox_inches="tight", pad_inches=1)
             
 
 class ModelPlotter(FitterContainer):
@@ -2079,7 +2118,7 @@ class ModelPlotter(FitterContainer):
         self.__best_model = None
 
 
-    def plot_best_sed(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',title=None,path=None,figname='best_model_sed.pdf'):
+    def plot_best_sed(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',title=None,figname=None):
         '''
         Plots the best SED model
         
@@ -2103,11 +2142,11 @@ class ModelPlotter(FitterContainer):
         title: str, optional
             Defines the title of the plot. Default is None.
 
-        path: str
-            path to save the table. Default is None
-                
-        figname: str
-            Name of the table. Default is 'best_model_sed.pdf'
+        figname: str, optional
+                    A path, or a Python file-like object. Note that fname is used verbatim,
+                    and there is no attempt to make the extension. Default is None.
+                    Note that one can choose the format of the figure by changing the extension,
+                    e.g., figure.pdf would generate the figure in PDF format.
             
         Returns
         ----------
@@ -2139,13 +2178,13 @@ class ModelPlotter(FitterContainer):
         plt.ylabel(r'$\nu F_\nu\,(\mathrm{erg\,s^{-1}\,cm^{-2}})$')
         if title is not None:
             plt.title(title)
-        if path is not None:
-            plt.savefig(path+'/'+figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',path)
+        if figname is not None:
+            plt.savefig(figname, dpi=300, bbox_inches="tight")
+            print('Image saved in ',figname)
         plt.show()
 
         
-    def plot_multiple_seds(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',cmap='rainbow_r',colorbar=True,title=None,path=None,figname='multiple_seds.pdf'):
+    def plot_multiple_seds(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',cmap='rainbow_r',colorbar=True,title=None,figname=None):
         '''
         Plots multiple SEDs.
         
@@ -2175,11 +2214,11 @@ class ModelPlotter(FitterContainer):
         title: str, optional
             Defines the title of the plot. Default is None.
 
-        path: str
-            path to save the table. Default is None
-                
-        figname: str
-            Name of the table. Default is 'multiple_seds.pdf'
+        figname: str, optional
+                    A path, or a Python file-like object. Note that fname is used verbatim,
+                    and there is no attempt to make the extension. Default is None.
+                    Note that one can choose the format of the figure by changing the extension,
+                    e.g., figure.pdf would generate the figure in PDF format.
             
         Returns
         ----------
@@ -2227,13 +2266,13 @@ class ModelPlotter(FitterContainer):
             cbar = plt.colorbar(cmap,label=r'$\chi^2$')
             cbar.set_ticks([models['chisq'].min(),5,10,50,models['chisq'].max()])
             cbar.set_ticklabels([np.around(models['chisq'].min(),decimals=1),5,10,50,np.around(models['chisq'].max(),decimals=1)])
-        if path is not None:
-            plt.savefig(path+'/'+figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',path)
+        if figname is not None:
+            plt.savefig(figname, dpi=300, bbox_inches="tight")
+            print('Image saved in ',figname)
         plt.show()
     
     
-    def plot2d(self,models,figsize=(10,5),marker='s',marker_size=50,cmap='rainbow_r',title=None,path=None,figname='2d_plot.pdf'):
+    def plot2d(self,models,figsize=(10,5),marker='s',marker_size=50,cmap='rainbow_r',title=None,figname=None):
         '''
         2D Plots of the SEDs results.
         
@@ -2257,11 +2296,11 @@ class ModelPlotter(FitterContainer):
         title: str, optional
             Defines the title of the plot. Default is None.
 
-        path: str
-            path to save the table. Default is None
-                
-        figname: str
-            Name of the table. Default is '2d_plot.pdf'
+        figname: str, optional
+                    A path, or a Python file-like object. Note that fname is used verbatim,
+                    and there is no attempt to make the extension. Default is None.
+                    Note that one can choose the format of the figure by changing the extension,
+                    e.g., figure.pdf would generate the figure in PDF format.
             
         Returns
         ----------
@@ -2436,13 +2475,13 @@ class ModelPlotter(FitterContainer):
         if title is not None:
             fig.suptitle(title,y=0.8)
             
-        if path is not None:
-            plt.savefig(path+'/'+figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',path)
+        if figname is not None:
+            plt.savefig(figname, dpi=300, bbox_inches="tight")
+            print('Image saved in ',figname)
             
         plt.show()
     
-    def plot3d(self,models,figsize=(8,8),marker_size=200,cmap='rainbow_r',title=None,path=None,figname='3d_plot.pdf'):
+    def plot3d(self,models,figsize=(8,8),marker_size=200,cmap='rainbow_r',title=None,figname=None):
         '''
         3D plot for the SED model results
         
@@ -2463,11 +2502,11 @@ class ModelPlotter(FitterContainer):
         title: str, optional
             Defines the title of the plot. Default is None.
 
-        path: str
-            path to save the table. Default is None
-                
-        figname: str
-            Name of the table. Default is 32d_plot.pdf'
+        figname: str, optional
+                    A path, or a Python file-like object. Note that fname is used verbatim,
+                    and there is no attempt to make the extension. Default is None.
+                    Note that one can choose the format of the figure by changing the extension,
+                    e.g., figure.pdf would generate the figure in PDF format.
             
         Returns
         ----------
@@ -2537,8 +2576,8 @@ class ModelPlotter(FitterContainer):
         if title is not None:
             plt.title(title)
 
-        if path is not None:
-            plt.savefig(path+'/'+figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',path)
+        if figname is not None:
+            plt.savefig(figname, dpi=300, bbox_inches="tight")
+            print('Image saved in ',figname)
 
         plt.show()
