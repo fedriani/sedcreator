@@ -52,6 +52,8 @@ User Documentation
 .. toctree::
     :maxdepth: 1
 
+    SedFluxer.rst
+    SedFitter.rst
     sedcreator.rst
 
 Indices and tables
