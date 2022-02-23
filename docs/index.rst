@@ -16,7 +16,7 @@ sedcreator
 
 .. raw:: html
 
-   <img src="_static/sedcreator_logo.png" onerror="this.src='_static/sedcreator_logo.png'; this.onerror=null;" width="495"/>
+   <img src="_static/sedcreator_logo.png" onerror="this.src='_static/sedcreator_logo.png'; this.onerror=null;" width="250"/>
 
 **sedcreator** helps you to construct your spectral energy distribution
 by providing convinient tools to measure fluxes on any image. It also
