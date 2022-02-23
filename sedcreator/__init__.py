@@ -2054,13 +2054,7 @@ class PentagonPlot(object):
         
     #TODO: find out why when putting self in pentagon_plot it does not work
     def plot(models,figname=None):
-        '''
-        figname: str, optional
-                    A path, or a Python file-like object. Note that fname is used verbatim,
-                    and there is no attempt to make the extension. Default is None.
-                    Note that one can choose the format of the figure by changing the extension,
-                    e.g., figure.pdf would generate the figure in PDF format.
-        '''
+
         
         models_phm = models['mcore','sigma','mstar','theta_view','av']
         models_chisq = models['chisq']
