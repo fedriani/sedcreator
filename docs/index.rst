@@ -42,7 +42,6 @@ Getting Started
     :maxdepth: 1
 
     install.rst
-    getting_started.rst
     citation.rst
     license.rst
 
