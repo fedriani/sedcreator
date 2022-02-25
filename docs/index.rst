@@ -14,14 +14,19 @@
 sedcreator
 ***************
 
-.. raw:: html
-
-   <img src="_static/sedcreator_logo.png" onerror="this.src='_static/sedcreator_logo.png'; this.onerror=null;" width="250"/>
+.. figure:: _static/sedcreator_logo.png
+   :alt: sedcreator logo
+   :target: https://github.com/fedriani/sedcreator
+   :class: with-shadow float-left
+   :width: 250
+   :align: left
 
 **sedcreator** helps you to construct your spectral energy distribution
-by providing convinient tools to measure fluxes on any image. It also
-provides a set of models to fit your SED with massive star formation models.
+by providing tools to measure fluxes on any image. It also provides a set
+of models to fit your SED with massive star formation models.
 It is an open source Python package.
+
+.. rst-class::  clear-both
 
 
 .. Important::

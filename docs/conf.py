@@ -23,7 +23,7 @@ author = 'Ruben Fedriani'
 copyright = f'2022-{datetime.utcnow().year}, {author}'
 
 # The full version, including alpha/beta/rc tags
-release = '0.6.6'
+release = '0.6.8'
 
 
 # -- General configuration ---------------------------------------------------
@@ -62,9 +62,6 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-import sphinx_bernard_theme
-#html_theme = 'sphinx_bernard_theme'
-#html_theme_path = [sphinx_bernard_theme.get_html_theme_path()]
 html_theme = 'sphinx_rtd_theme'
 
 
