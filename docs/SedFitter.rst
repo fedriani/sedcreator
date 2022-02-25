@@ -27,3 +27,5 @@ From this object we can retrieve the tables with physical parameters, together w
     ... tablename='table_432models.txt')    
     >>> source_models_4p = source_sed_results.get_model_info(keys=['mcore','sigma','mstar','theta_view'],
     ... tablename='table_8640models.txt')
+
+Below one can find an example:
