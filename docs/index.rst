@@ -58,6 +58,7 @@ User Documentation
 
     SedFluxer.rst
     SedFitter.rst
+    optimal_aperture.rst
     sedcreator.rst
 
 Indices and tables
