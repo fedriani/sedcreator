@@ -5,10 +5,10 @@ SedFluxer
 Introduction
 ------------
 
-SedFluxer is a class with a number of convinience functions to measure fluxes from images
+SedFluxer is a class with a number of convenience functions to measure fluxes from images
 in fits format input by the user. get_flux() reads the header and does units transformation, provided
-that the header is correct, else get_raw_flux() does not do any units transformation and give the
-results in raw units so the user can perform its own units transformation.
+that the header is correct, else get_raw_flux() does not do any units transformation and gives the
+results in raw units so the user can perform their own units transformation.
 
 Starting the SedFluxer object
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -21,15 +21,15 @@ ESASky or SkyView::
     >>> from sedcreator import SedFluxer
     >>> fluxer = SedFluxer(hdu)
 
-Once the SedFluxer is initialised, we can now measure fluxes performing aperture photometry by either using get_flux() for automatic unit transformation based on the header or get_raw_fux() to make own unit transformation.
+Once the SedFluxer is initialised, we can now measure fluxes performing aperture photometry by either using get_flux() for automatic unit transformation based on the header or get_raw_fux() to make our own unit transformation.
 These functions need central coordinates, which are astropy.SkyCoord type, the aperture radius, inner annulus radius,
 and outer annulus radius given in arcsec::
 
     >>> flux = fluxer.get_flux(central_coords,aper_rad,inner_annu,outer_annu)
     >>> #or
-    >>> flux = fluxer.get_flux(central_coords,aper_rad,inner_annu,outer_annu)
+    >>> flux = fluxer.get_raw_flux(central_coords,aper_rad,inner_annu,outer_annu)
 
-With this object flux, one can retrieve the values for the background subtracted flux and the total flux.
+With this flux object, one can retrieve the values for the background subtracted flux and the total flux.
 One can also print useful information from the header and parameters used and plot the image used together
 with the aperture and annulus defined::
 
@@ -102,7 +102,7 @@ And printing the info::
     Background   0.007306343563607133 unitless
     ############################
 
-And finally retrieve the fluxes (background subtracted, and without background subtraction) for own calculations
+And finally retrieve the fluxes (background subtracted, and without background subtraction) for our own calculations
 (and use with the SedFitter class)::
 
     >>> flux_bkg_sub,flux = GC_flux.get_value()

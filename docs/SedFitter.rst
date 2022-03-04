@@ -5,7 +5,7 @@ SedFitter
 Introduction
 ------------
 
-SedFitter is a class with a number of convinience functions to fit the measured fluxes input by the user.
+SedFitter is a class with a number of convenience functions to fit the measured fluxes input by the user.
 
 
 Starting the SedFitter object
