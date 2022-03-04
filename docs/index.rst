@@ -36,6 +36,9 @@ It is an open source Python package.
     the python packages that sedcreator depends on.
 
 
+.. warning::
+    This package is under active development.
+
 .. toctree::
    :maxdepth: 1
    :caption: Contents:
