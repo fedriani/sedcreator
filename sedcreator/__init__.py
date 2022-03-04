@@ -764,7 +764,7 @@ class FitterContainer():
         keys: str or array of str
             keys to be used to select the unique final table. It should be use either
             ['mcore','sigma','mstar'] for the 432 physical models considering the best (by chisq) viewing angle or
-            ['mcore','sigma','mstar','theta_view'] for the 8640 models in cluding the viewing angle
+            ['mcore','sigma','mstar','theta_view'] for the 8640 models including the viewing angle
             Default is ['mcore','sigma','mstar','theta_view']
 
         tablename: str, optional
