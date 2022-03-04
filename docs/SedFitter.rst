@@ -73,7 +73,6 @@ We know need to call the ``sed_fit()`` function to fit out observations, but fir
     >>> AV_max = 1000.0 #mag
 
     >>> source_sed_results = source_sed.sed_fit(dist=distance,AV_max=AV_max,method='minimize')
-    ... source_uplim=upp_limit,source_filter=filter_name)
 
 Once the fit is done, we can retrieve the best models ordered by chisq using the function ``get_model_info()``. One can save the table setting tablename (e.g. tablename='se_results.txt'. We can either retrieve the 432 physical models or the full 8640 model grid::
 
