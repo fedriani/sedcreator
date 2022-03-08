@@ -110,6 +110,7 @@ Once the fit is done, we can retrieve the best models ordered by chisq using the
 
 Now, we can generate very interesting plots to show our data and the best models. To do that we need first to initilise the ``ModelPlotter`` class with the object from the sed_fit::
 
+    >>> from sedcreator import ModelPlotter
     >>> md = ModelPlotter(source_sed_results)
 
 It is very simple then to plot, for example the best 5 SEDs from the 432 physical models::
