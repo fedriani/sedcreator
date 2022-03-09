@@ -1915,7 +1915,7 @@ class SedFitter(object):
             if number_of_models==0:
                 raise ValueError('The considered constraints either in chisq_cut or core_radius_cut produce an empty table. Please consider to relax them.')
             if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
+                raise ValueError('The considered constraints in chisq_cut or core_radius_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
             if method is not None:
                 if method == 'liu':
