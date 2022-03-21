@@ -721,6 +721,79 @@ class SedFluxer:
             plt.show()
 
         return opt_rad
+    
+    def plot_aps(self, coord_list, aperture_list):
+        
+        '''
+        Plots a circular aperture for each source ontop of the image.
+        
+        Parameters
+        ----------
+        image: fits file
+            Image to plot
+        coord_list: list of `astropy.coordinates.SkyCoord`
+            List of coordinates on which each aperture is centered
+        aperture_list: list of floats
+            List of aperture radii to plot
+        
+        Returns
+        -------
+        Plots apertures over the image.
+        '''
+        
+        data,header = self.data 
+        
+        wcs_header = WCS(self.image.header).celestial
+        plt.figure(figsize=(6,6))
+        plt.subplot(projection=wcs_header)
+        
+        if 'CD1_1' in header:
+            pixel_scale = np.absolute(header['CD1_1'])*3600.0
+        elif 'CDELT1' in header:
+            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+        else:
+            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+
+        
+        x_source_cent, y_source_cent = wcs_header.world_to_pixel(coord_list[0])
+        
+        #plot image
+        primary_ap_rad_pixel = np.max(aperture_list)/pixel_scale 
+        data_for_norm = data[int(y_source_cent-5.0*primary_ap_rad_pixel):int(y_source_cent+5.0*primary_ap_rad_pixel),
+                                 int(x_source_cent-5.0*primary_ap_rad_pixel):int(x_source_cent+5.0*primary_ap_rad_pixel)]
+        norm = simple_norm(data_for_norm[data_for_norm>0], stretch='log', percent=99.5)
+        #tr = scipy.ndimage.rotate(data, 45)
+        plt.imshow(data, cmap='inferno', origin='lower', norm=norm)
+        
+        #set x and y limits and labels
+        plt.xlim(x_source_cent-5.0*primary_ap_rad_pixel, x_source_cent+5.0*primary_ap_rad_pixel)
+        plt.ylim(y_source_cent-5.0*primary_ap_rad_pixel, y_source_cent+5.0*primary_ap_rad_pixel)
+        plt.xlabel('RA (J2000)')
+        plt.ylabel('Dec (J2000)')
+        
+        #plot apertures
+        for i in range(len(aperture_list)):
+            x_source, y_source = wcs_header.world_to_pixel(coord_list[i])
+            plt.plot(x_source, y_source,'kx')
+            #defines the aperture size in pixels
+            aper_rad_pixel = aperture_list[i]/pixel_scale
+            aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
+            aperture.plot(color='white', linewidth=1.5)
+            
+        colorbar=True
+        if colorbar:
+            cbar_ticks = np.around(np.linspace(norm.vmin,norm.vmax,num=5))
+            if 'BUNIT' in header:
+                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
+            elif 'FUNITS' in header:
+                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['FUNITS']), pad=0.01)
+            elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
+                cbar = plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
+            else:
+                cbar = plt.colorbar(label='PixelUnits: check header', pad=0.01)
+            cbar.set_ticks(cbar_ticks)
+            cbar.set_ticklabels(cbar_ticks)
+
         
 class FitterContainer():
     '''
