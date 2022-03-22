@@ -665,7 +665,8 @@ class SedFluxer:
         
         FLUX_BKG = []
         FLUX = []
-
+        flux_increase = []
+        opt_rad = None
 
         #Step size for sampling aperture radii
         #Sample aperture radii
@@ -700,11 +701,19 @@ class SedFluxer:
             closest_radius_ind = np.argmin(np.abs(x - ideal_radius))
             #flux at this closest radius
             flux = y[closest_radius_ind]
-
+            if i != 0:
+                flux_increase.append((y[i] - y[i-1])/y[i])
+            else:
+                flux_increase.append(np.nan)
             if flux <= y[i]*threshold:
                 opt_rad = x[i]
                 break
-
+                
+        #if threshold condition was never reached
+        if opt_rad is None:
+            #set opt_rad to the radius that yields the smallest percentage flux increase
+            opt_rad = x[np.argmin(flux_increase)]
+            
         if profile_plot:
 
             plt.figure()
@@ -721,6 +730,142 @@ class SedFluxer:
             plt.show()
 
         return opt_rad
+    
+    def get_optimal_apertures_crowded(self, coord_list, ap_inner=5.0,ap_outer=60.0,aper_increase=1.3,
+                                        threshold=1.1, boundary_arcsec=60., profile_plot=False, plot_map=False, exclusion_rad=5.):
+
+        '''
+        Finds the optimal apertures for a list of sources based on the following method:
+        EXPLAIN METHOD.
+
+        Parameters
+        ----------
+        image: fits file
+            Image for which we would like to calculate the "optimal" aperture radius
+
+        coord_list: List of `astropy.coordinates.SkyCoord` statements
+                    Central coordinates where the aperturess will be centred on the data image.
+                    These must be SkyCoord statements.
+
+        ap_inner: float
+                Inner aperture radius given in arcsec. The script will take care to convert it into pixels.
+                It the starting point to find the optimal aperture. Default is 5.0 arcsec.
+
+        ap_outer: float
+                Outer aperture radius given in arcsec. The script will take care to convert it into pixels.
+                It the ending point to find the optimal aperture. Default is 60.0 arcsec.
+
+        step_size: float
+                Step size for sampling aperture radii. Default is 0.25arcsec
+
+        aper_increase: float
+            It is the increase in aperture to meet the condition
+            aper_increase*optimal radius <= flux at opt.rad. * threshold.
+            Default is 1.30, i.e. 30% increase in aperture.
+
+        threshold: float
+            It is the condition to be met such as, at the optimal aperture radius,
+            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.08, i.e. 10% increase in flux.
+
+        profile_plot: bool
+            Plots the flux profile versus the aperture radius size. Default is False
+
+        plot_map: bool
+            Plots the map showing which source (if any) each pixel is assigned to
+
+        Returns
+        -------
+        opt_rad: float
+            Optimal aperture radius defined by this method given in arcsec
+
+        '''
+
+        def distance(point1, point2):
+            return np.sqrt((point1[0]-point2[0])**2 + (point1[1]-point2[1])**2)
+
+        wcs_header = WCS(self.image.header).celestial
+        img_shape = np.shape(self.data[0])
+        #initialize optimal aperture list given exlusion radius
+        optimal_apertures = [exclusion_rad]*len(coord_list)#np.zeros(len(coord_list)) #arcseconds
+        #get pixel scale
+        if 'CD1_1' in self.image.header:
+            pixel_scale = np.absolute(self.image.header['CD1_1'])*3600.0
+        elif 'CDELT1' in self.image.header:
+            pixel_scale = np.absolute(self.image.header['CDELT1'])*3600.0
+
+        boundary = int(boundary_arcsec*pixel_scale)
+        x_sources = []
+        y_sources = []
+
+        #record pixel positions of each source
+        for i in range(len(coord_list)):
+            x_source, y_source = wcs_header.world_to_pixel(coord_list[i])
+            x_sources.append(x_source)
+            y_sources.append(y_source)
+
+        stop = False
+        iterations = 0
+        masks = list([np.zeros(img_shape, dtype=bool)]) * len(coord_list)
+        #If not converged (at least one aperture has changed by >1% since previous iteration
+        while stop == False:
+            #Record apertures from preveous iteration to compute change later
+            old_aps = np.copy(optimal_apertures)
+            #Loop through sources
+            for i in range(len(coord_list)):
+                #initialize mask as Boolean array of "False" values
+                mask = np.zeros(img_shape, dtype=bool)
+                x_target = x_sources[i]
+                y_target = y_sources[i]
+                distances = []
+                #For each source in list...
+                for src in range(len(coord_list)):
+                    #For sources other than current target
+                    if src != i:
+                        x_source = x_sources[src]
+                        y_source = y_sources[src]
+                        #retrieve radius to exclude around that source
+                        exclusion_rad = optimal_apertures[src]
+                        #calculate distance between current target and other source
+                        dist = distance([x_target, y_target], [x_source, y_source])
+                        distances.append(dist*pixel_scale)
+                        #Loop through pixels within a certain window to save time -- need to fix this to make boundary generic
+                        for y in range(int(y_target)-boundary, int(y_target)+boundary+1):
+                            for x in range(int(x_target)-boundary, int(x_target)+boundary+1):
+                                #if pixel falls within the aperture of the other source...
+                                if (y-y_source)**2 + (x-x_source)**2 <= (exclusion_rad/pixel_scale)**2:
+                                    #AND is > 5" away from current target
+                                    if (y-y_target)**2 + (x-x_target)**2 > (5/pixel_scale)**2:
+                                        #AND is closer to the other source than the target
+                                        if distance([x_target, y_target], [x, y]) > distance([x_source, y_source], [x, y]):
+                                        #Mask this pixel out during optimal ap calculation
+                                            mask[y,x] = True
+                #Set upper bound of optimal aperture test to the distance to the source closest to the target
+                upper_rad = np.min(distances)
+                #Find optimal aperture with these constraints, masking out pixels that "belong" to another source
+                ap = self.get_optimal_aperture(coord_list[i],ap_inner=5.0,ap_outer=upper_rad,
+                                          aper_increase=1.3,
+                                          threshold=1.1,profile_plot=False)
+
+                optimal_apertures[i] = ap
+                masks[i] = mask
+            #Calculate change in each aperture from previous iteration
+            change = (np.array(old_aps) - np.array(optimal_apertures))/np.array(old_aps)
+            iterations += 1
+
+            if all(np.abs(num) <= 0.01 for num in change):
+                print("Fractional change:", change)
+                print("Apertures radii:", optimal_apertures)
+                print("Number of iterations:", iterations)
+                stop = True
+
+        if plot_map == True:
+            #create map of pixel assignments
+            assignment_map = np.zeros(np.shape(masks[0]))
+            for i in range(len(masks)):
+                assignment_map+=(masks[i].astype(int)*(i+1))
+            self.plot_mask(coord_list, optimal_apertures, assignment_map)
+
+        return optimal_apertures, masks
     
     def plot_aps(self, coord_list, aperture_list):
         
@@ -794,6 +939,55 @@ class SedFluxer:
             cbar.set_ticks(cbar_ticks)
             cbar.set_ticklabels(cbar_ticks)
 
+     def plot_mask(self, coord_list, rad_list, mask):
+        """
+        Plots a Boolean mask as a 2D image (bright pixels indicate True/masking)
+        Parameters
+        ----------
+        image: fits file
+            Image for which we would like to calculate the "optimal" aperture radius
+        central_coords: `astropy.coordinates.SkyCoord`
+            Central coordinates where the apertures will be centred on the data image.
+            This must be a SkyCoord statement.
+        rad: float
+            radius of aperture (used for x and y lims of plot)
+        mask: 2D Boolean array
+            mask to plot
+        Returns
+        --------
+        None. Just plots mask.
+        """
+        wcs_header = WCS(self.image.header).celestial
+        #pixel location of source
+        x_source_central, y_source_central = wcs_header.world_to_pixel(coord_list[0])
+        if 'CD1_1' in self.image.header:
+            pixel_scale = np.absolute(self.image.header['CD1_1'])*3600.0
+        elif 'CDELT1' in self.image.header:
+            pixel_scale = np.absolute(self.image.header['CDELT1'])*3600.0
+        print("Pixel scale", pixel_scale)
+        plt.figure()
+        plt.subplot(projection=wcs_header)
+
+        plt.xlim(x_source_central-5.0*rad_list[0]/pixel_scale,x_source_central+5.0*rad_list[0]/pixel_scale)
+        plt.ylim(y_source_central-5.0*rad_list[0]/pixel_scale,y_source_central+5.0*rad_list[0]/pixel_scale)
+
+
+        #defines the aperture size in pixels
+        for i in range(len(coord_list)):
+            x_source, y_source = wcs_header.world_to_pixel(coord_list[i])
+            rad = rad_list[i]
+            aper_rad_pixel = rad/pixel_scale
+            aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
+            aperture.plot(color='red')
+            plt.plot(x_source, y_source,'rx')
+
+        plt.xlabel('RA (J2000)')
+        plt.ylabel('Dec (J2000)')
+
+        mask_int = mask
+
+        plt.imshow(mask_int)
+        plt.show() 
         
 class FitterContainer():
     '''
