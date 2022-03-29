@@ -938,7 +938,7 @@ class SedFitter(object):
     '''
     A class used to fit the SED model grid
     '''
-    def __init__(self, extc_law=None,
+    def __init__(self, extc_law='kmh',
                  lambda_array=None,
                  flux_array=None,
                  err_flux_array=None,
@@ -972,6 +972,115 @@ class SedFitter(object):
             ALL_model_idx.append([int(i[0:11][0:2]),int(i[0:11][3:5]),
                                   int(i[0:11][6:8]),int(i[0:11][9:11])])
         return(ALL_model_dat,ALL_model_idx)
+
+    def get_sed(self,mc=10, sigma=0.1, mstar=0.5, theta_view=22.33, Av=0,distance=1000):
+        '''
+        Retrive the SED for give physical parameters.
+        Note that not all combinations of the parameters are present in the models database,
+        an error will be raised, please try with other combination
+        
+        Parameters
+        ----------
+        mc: float
+            mass of the core (Msun) for the SED to be retrieved. Allowed values are:
+            [10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0]
+
+        sigma: float
+            mass surface density of the clump (g/cm2) for the SED to be retrieved. Allowed values are:
+            [0.1,0.316,1.0,3.16]
+
+        mstar: float
+            mass of the star (Msun) for the SED to be retrieved. Allowed values are:
+            [0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0]
+
+        theta_view: float
+            viewing angle (deg) for the SED to be retrieved. Allowed values are:
+            [12.84, 22.33, 28.96, 34.41, 39.19, 43.53, 47.55, 51.32, 54.90, 58.33,
+             61.64, 64.85, 67.98, 71.03, 74.04, 77.00, 79.92, 82.82, 85.70, 88.57]
+            
+        Av: float
+            visual extintion (mag) for the SED to be extincted. Allowed values are:
+            >0
+            
+        Returns
+        ----------
+        lambda_model, flux_model_extincted : (array,array)
+            wavelength and flux for the selected physical parameters
+        '''
+        
+        #loading here SED model files, extinction law, default parameters
+        norm_extc_law = self.extc_law
+        MODEL_DATA, MODEL_IDX = self.model_data
+        master_dir = self.master_dir
+        default_filters_table = self.default_filters
+        filter_name = default_filters_table['filter']
+        filter_wavelength = default_filters_table['wavelength']
+        
+        #database compose of this
+        nmc=15
+        mc_arr=np.array([10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0])
+
+        nsigma=4
+        sigma_arr=np.array([0.1,0.316,1.0,3.16])
+
+        nmstar=14
+        mstar_arr=np.array([0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0])
+
+        nmu=20
+        mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
+        mu_arr=mu_arr[::-1] #reversing the array
+        theta_arr=np.arccos(mu_arr)/np.pi*180.0
+        
+        #check input parameters are in database:
+        
+        if mc not in mc_arr:
+            print('input core mass (mc)', mc, 'is not in the database')
+            print('please input one of the following:')
+            print(mc_arr)
+            raise ValueError("")
+        if sigma not in sigma_arr:
+            print('input mass surface density (sigma)', sigma, 'is not in the database')
+            print('please input one of the following:')
+            print(sigma_arr)
+            raise ValueError("")
+        if mstar not in mstar_arr:
+            print('input stellar mass (m_star)', mstar, 'is not in the database')
+            print('please input one of the following:')
+            print(mstar_arr)
+            raise ValueError("")
+        if np.round(theta_view,2) not in np.round(theta_arr,2):
+            print('input viewing angle (theta_view)', theta_view, 'is not in the database')
+            print('please input one of the following:')
+            print(np.round(theta_arr,2))
+            raise ValueError("")
+        if Av<0:
+            print('Av must be a positive float')
+            raise ValueError("")
+
+        if mc in mc_arr:
+            mc_idx = np.where(mc_arr==mc)[0]
+        if sigma in sigma_arr:
+            sigma_idx = np.where(sigma_arr==sigma)[0]
+        if mstar in mstar_arr:
+            mstar_idx = np.where(mstar_arr==mstar)[0]
+        if np.round(theta_view,2) in np.round(theta_arr,2):
+            mu_idx = np.where(np.round(theta_arr,2)==np.round(theta_view,2))[0]
+            
+        SED_number = '{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}'.format(int(mc_idx)+1,int(sigma_idx)+1,
+                                                                  int(mstar_idx)+1,int(mu_idx)+1)
+        
+        if SED_number+'.dat' in os.listdir(master_dir+'/Model_SEDs/sed/'):
+            #access the data in the models
+            sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+SED_number+'.dat',unpack=True)
+            lambda_model = sed[0] #micron
+            flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*distance)**2.0) #from Lsun to erg s-1 cm-2
+            flux_model_extincted = flux_model*10.0**(-0.4*Av*norm_extc_law)
+        else:
+            raise ValueError('The specific combination of input parameters mc=',
+                             mc,'sigma=', sigma,'mstar=', mstar,'theta_view=', theta_view,
+                             'is not in the database, please try another combination')
+        
+        return(lambda_model,flux_model_extincted)
 
     @property
     def print_default_filters(self):
