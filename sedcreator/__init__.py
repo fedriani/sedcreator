@@ -973,7 +973,7 @@ class SedFitter(object):
                                   int(i[0:11][6:8]),int(i[0:11][9:11])])
         return(ALL_model_dat,ALL_model_idx)
 
-    def get_sed(self,mc=10, sigma=0.1, mstar=0.5, theta_view=22.33, Av=0,distance=1000):
+    def get_sed(self,mc=10, sigma=0.1, mstar=0.5, theta_view=22.33, Av=0,distance=1000, filter_array=None):
         '''
         Retrive the SED for give physical parameters.
         Note that not all combinations of the parameters are present in the models database,
@@ -1002,10 +1002,15 @@ class SedFitter(object):
             visual extintion (mag) for the SED to be extincted. Allowed values are:
             >0
             
+        filter_array: str (or array of str)
+            Name(s) of the filter(s) to convolve the SED. It convolves by the filter responde the model SED value.
+            Default None.
+            
         Returns
         ----------
         lambda_model, flux_model_extincted : (array,array)
             wavelength and flux for the selected physical parameters
+            If filter_array is not None, lambda_model, flux_model_extincted have the same length as filter_array.
         '''
         
         #loading here SED model files, extinction law, default parameters
@@ -1056,6 +1061,47 @@ class SedFitter(object):
         if Av<0:
             print('Av must be a positive float')
             raise ValueError("")
+            
+        if filter_array is not None:
+            #checks if the user input a single filter without being an array
+            if type(filter_array)==str:
+                #if so convert into one
+                filter_array = [filter_array]
+            for filt in filter_array:
+                if filt not in filter_name:
+                    print(filt,'is not in the default filters database')
+                    print('Please, make sure to input one of the following:')
+                    default_filters_table.pprint()
+                    raise ValueError("")
+                    
+            filter_idx = []
+            for filter_value in filter_array:
+                filter_idx.append(np.where(filter_name==filter_value)[0][0])
+
+            lambda_array_filters = filter_wavelength[filter_idx] #this is use for the convolution
+            filter_array_model = filter_name[filter_idx]
+
+            #load the filters lambda and responses to make the convolution
+            FILTER_wave_resp = []
+            for filter_NAME in filter_array_model:
+                filter_file = np.loadtxt(master_dir+'/Model_SEDs/parfiles/'+filter_NAME+'.txt',unpack=True)
+
+                fwave = filter_file[0]
+                fresponse = filter_file[1]
+
+                fnu=c_micron_s/fwave
+                nf=len(fnu)
+
+                if fnu[0] > fnu[1]:
+                    fnu=fnu[::-1]
+                    fresponse=fresponse[::-1]
+
+                dfnu=fnu[1:nf-1]-fnu[0:nf-2]
+                fint=np.sum(0.5*(fresponse[0:nf-2]+fresponse[1:nf-1])*dfnu)
+                fresponse=fresponse[1:nf-1]/fint
+                fwave=fwave[1:nf-1]
+
+                FILTER_wave_resp.append([fwave,fresponse,dfnu])
 
         if mc in mc_arr:
             mc_idx = np.where(mc_arr==mc)[0]
@@ -1075,6 +1121,23 @@ class SedFitter(object):
             lambda_model = sed[0] #micron
             flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*distance)**2.0) #from Lsun to erg s-1 cm-2
             flux_model_extincted = flux_model*10.0**(-0.4*Av*norm_extc_law)
+            
+            if filter_array is not None:
+                flux_model_extincted_CONV = []
+                for filt_conv,filt_wave in zip(FILTER_wave_resp,lambda_array_filters):
+                    fwave = filt_conv[0]
+                    fresponse = filt_conv[1]
+                    dfnu=filt_conv[2]
+
+                    I_arr1=np.interp(fwave[::-1],lambda_model[::-1],flux_model_extincted[::-1])
+                    I_arr1=I_arr1/c_micron_s*fwave[::-1]
+                    I_filt=np.sum(I_arr1*dfnu[::-1]*fresponse[::-1])
+                    I_filt=I_filt*c_micron_s/filt_wave
+                    flux_model_extincted_CONV.append(I_filt)
+                flux_model_extincted_CONV = np.array(flux_model_extincted_CONV)
+                return(lambda_array_filters,flux_model_extincted_CONV)
+                
+            
         else:
             raise ValueError('The specific combination of input parameters mc=',
                              mc,'sigma=', sigma,'mstar=', mstar,'theta_view=', theta_view,
