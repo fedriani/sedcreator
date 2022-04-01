@@ -973,7 +973,7 @@ class SedFitter(object):
                                   int(i[0:11][6:8]),int(i[0:11][9:11])])
         return(ALL_model_dat,ALL_model_idx)
 
-    def get_sed(self,mc=10, sigma=0.1, mstar=0.5, theta_view=22.33, Av=0,distance=1000, filter_array=None):
+    def get_sed(self,mcore=10, sigma=0.1, mstar=0.5, theta_view=22.33, av=0,dist=1000, filter_array=None):
         '''
         Retrive the SED for give physical parameters.
         Note that not all combinations of the parameters are present in the models database,
@@ -1038,8 +1038,8 @@ class SedFitter(object):
         
         #check input parameters are in database:
         
-        if mc not in mc_arr:
-            print('input core mass (mc)', mc, 'is not in the database')
+        if mcore not in mc_arr:
+            print('input core mass (mc)', mcore, 'is not in the database')
             print('please input one of the following:')
             print(mc_arr)
             raise ValueError("")
@@ -1058,7 +1058,7 @@ class SedFitter(object):
             print('please input one of the following:')
             print(np.round(theta_arr,2))
             raise ValueError("")
-        if Av<0:
+        if av<0:
             print('Av must be a positive float')
             raise ValueError("")
             
@@ -1103,8 +1103,8 @@ class SedFitter(object):
 
                 FILTER_wave_resp.append([fwave,fresponse,dfnu])
 
-        if mc in mc_arr:
-            mc_idx = np.where(mc_arr==mc)[0]
+        if mcore in mc_arr:
+            mc_idx = np.where(mc_arr==mcore)[0]
         if sigma in sigma_arr:
             sigma_idx = np.where(sigma_arr==sigma)[0]
         if mstar in mstar_arr:
@@ -1119,8 +1119,8 @@ class SedFitter(object):
             #access the data in the models
             sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+SED_number+'.dat',unpack=True)
             lambda_model = sed[0] #micron
-            flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*distance)**2.0) #from Lsun to erg s-1 cm-2
-            flux_model_extincted = flux_model*10.0**(-0.4*Av*norm_extc_law)
+            flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*dist)**2.0) #from Lsun to erg s-1 cm-2
+            flux_model_extincted = flux_model*10.0**(-0.4*av*norm_extc_law)
             
             if filter_array is not None:
                 flux_model_extincted_CONV = []
