@@ -425,6 +425,11 @@ class SedFluxer:
                             unit_factor_Jy = 1.0 #leave it in Jy
                         flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
                         flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
+                    elif 'Jy'==header['BUNIT']:
+                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                        flux = ap_phot['aperture_sum'].data[0] #Jy
+                    else:
+                        raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
                 elif 'FUNITS' in header:
                     if 'Jy/pix' in header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
                         if 'mJy/pix' in header['FUNITS']:
@@ -508,9 +513,12 @@ class SedFluxer:
                         unit_factor_Jy = 1.0 #leave it in Jy
                     flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
+                elif 'Jy'==header['BUNIT']:
+                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                    flux = ap_phot['aperture_sum'].data[0] #Jy
                 else:
                     raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
-            #TODO: add mJy/pix here!
+
             elif 'FUNITS' in header:
                 if 'Jy/pix' in header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
                     if 'mJy/pix' in header['FUNITS']:
@@ -519,6 +527,9 @@ class SedFluxer:
                         unit_factor_Jy = 1.0 #leave it in Jy
                     flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
+                elif 'Jy'==header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
+                    flux = ap_phot['aperture_sum'].data[0] #Jy
                 elif 'Jy/sq-arc' in header['FUNITS']:#This is mainly for SOFIA data
                     if 'mJy/sq-arc' in header['FUNITS']:
                         unit_factor_Jy = 0.001 #from mJy to Jy
@@ -536,6 +547,7 @@ class SedFluxer:
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
                  aperture=aperture,annulus_aperture=annulus_aperture,mask=mask,flux_method='get_flux')
+
 
     def get_raw_flux(self,central_coords,aper_rad,inner_annu,outer_annu,mask=None):
         '''
