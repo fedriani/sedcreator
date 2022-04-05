@@ -286,14 +286,20 @@ class SedFluxer:
         try:
             data = self.image.data
             header = self.image.header
-            #this is to deal with ALMA and VLA data that has multiple extensions
-            if len(np.shape(self.image.data))!=2:
+            #this is to deal with SOFIA data that has 3 dimensions in shape
+            if len(np.shape(self.image.data))==3:
+                data = self.image.data[0]
+            #this is to deal with ALMA and VLA data that has 4 dimensions in shape
+            if len(np.shape(self.image.data))==4:
                 data = self.image.data[0][0]
         except:
             data = self.image[0][0].data
             header = self.image[0][0].header
-            #this is to deal with ALMA and VLA data that has multiple extensions
-            if len(np.shape(self.image[0][0].data))!=2:
+            #this is to deal with SOFIA data that has 3 dimensions in shape
+            if len(np.shape(self.image[0][0].data))==3:
+                data = self.image[0][0].data[0]
+            #this is to deal with ALMA and VLA data that has 4 dimensions in shape
+            if len(np.shape(self.image[0][0].data))==4:
                 data = self.image[0][0].data[0][0]
         return(data,header)
         
