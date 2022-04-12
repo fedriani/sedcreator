@@ -725,7 +725,7 @@ class SedFluxer:
 
         if profile_plot:
 
-            plt.figure()
+            plt.figure(figsize=(6,4))
             plt.plot(x, y,'ro', markersize=2.5, label="Bkg-sub flux")
 
             plt.axvline(x=opt_rad, color="black", label="Optimal Aperture")
