@@ -727,15 +727,15 @@ class SedFluxer:
 
             plt.figure()
             plt.plot(x, y,'ro', markersize=2.5, label="Bkg-sub flux")
-#             plt.plot(x, FLUX,'bo', markersize=2.5, label="Non-bkg-sub flux")
 
             plt.axvline(x=opt_rad, color="black", label="Optimal Aperture")
-            plt.xlabel("Aperture radius (arcsec)",  fontsize=14)
+            plt.xlabel("Aperture radius (arcsec)")
             if unit:
-                plt.ylabel('Flux (Jy)', fontsize=14)
+                plt.ylabel('Flux (Jy)')
             else:
-                plt.ylabel('Flux (unitless)', fontsize=14)
-            plt.legend()
+                plt.ylabel('Flux (unitless)')
+            plt.xlim(0)
+            plt.ylim(0)
             plt.show()
 
         return opt_rad
