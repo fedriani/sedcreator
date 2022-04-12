@@ -244,7 +244,7 @@ class FluxerContainer():
             plt.ylabel('Dec (J2000)')
         
         if colorbar:
-            cbar_ticks = np.around(np.linspace(norm.vmin,norm.vmax,num=5))
+            cbar_ticks = np.logspace(np.log10(norm.vmin),np.log10(norm.vmax),num=5)
             if 'BUNIT' in header:
                 cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
             elif 'FUNITS' in header:
@@ -255,6 +255,7 @@ class FluxerContainer():
                 cbar = plt.colorbar(label='PixelUnits: check header', pad=0.01)
             cbar.set_ticks(cbar_ticks)
             cbar.set_ticklabels(cbar_ticks)
+            cbar.ax.set_yticklabels(["{:.2f}".format(i) for i in cbar_ticks])
         if title is not None:
             plt.title(title)
             
