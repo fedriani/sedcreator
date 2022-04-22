@@ -1159,7 +1159,7 @@ class SedFitter(object):
             
         else:
             raise ValueError('The specific combination of input parameters mc=',
-                             mc,'sigma=', sigma,'mstar=', mstar,'theta_view=', theta_view,
+                             mcore,'sigma=', sigma,'mstar=', mstar,'theta_view=', theta_view,
                              'is not in the database, please try another combination')
         
         return(lambda_model,flux_model_extincted)
