@@ -1335,7 +1335,7 @@ class SedFitter(object):
 
         return(chisq)
     
-    def sed_fit(self,dist,AV_max=1000,method='minimize',avopt=0):
+    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',avopt=0):
         #TODO: write proper function description.
         '''
         Fits the SED observations to the Z&T18 set of models
@@ -1345,15 +1345,19 @@ class SedFitter(object):
         dist: float
             distance given in pc to the object.
 
+        AV_min: float
+            Minimum visual extunction value to consider in the fit. The fit is perform in the range [AV_min,AV_max].
+            Default is 0.0
+
         AV_max: float
-            Maximum visual extunction value to consider in the fit. The fit is perform in the range [0,AV_max].
+            Maximum visual extunction value to consider in the fit. The fit is perform in the range [AV_min,AV_max].
             Default is 1000.0
 
         method: {'minimize', 'grid_search', 'idl'}
             Method to perform the fit.
             'minimize' method uses the `scipy.optimize` minimize function over chisq_to_minimize()
             to find the best AV for each 8640 model.
-            'grid_search' performs a for loop over theAV_array = np.arange(0.0,AV_max+1.0,1.0)
+            'grid_search' performs a for loop over the AV_array = np.arange(AV_min,AV_max+1.0,1.0)
             and calculates the chi square as define in Z&T18 (See also De Buizer et al. 2017).
             'idl' is a translation of the IDL version that also performs a grid search,
             it keeps the compatibility with the previous version using the same constants and fits files.
@@ -1366,7 +1370,7 @@ class SedFitter(object):
             
         Returns
         ----------
-        FitterContainer: class with needed information to use the functions. COMPLETE!
+        FitterContainer: class with needed information to use the functions.
         '''
         
         if method not in ('grid_search', 'idl', 'minimize'):
@@ -1391,8 +1395,10 @@ class SedFitter(object):
         errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
         errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
 
-        #Creating the AV array, simply from 0 to AV_max in steps of 1
-        AV_array = np.arange(0.0,AV_max+1.0,1.0)
+        #Creating the AV array, simply from AV_min to AV_max in steps of 1
+        if AV_min<0:
+            raise ValueError("AV_min must be greater or equal than 0.0")
+        AV_array = np.arange(AV_min,AV_max+1.0,1.0)
 
         #loading here SED model files, extinction law, default parameters
         norm_extc_law = self.extc_law
@@ -1452,7 +1458,7 @@ class SedFitter(object):
 
                 #fitting the best av for each model (8640)
                 result = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy_log),
-                                  bounds=Bounds(0.0,AV_max))
+                                  bounds=Bounds(AV_min,AV_max))
 
                 chisq,chisq_nonlimit = self.chisq(flux_model_Jy_log,result.x[0])
 
@@ -1596,7 +1602,7 @@ class SedFitter(object):
                               lambda_array = self.lambda_array,flux_array= self.flux_array,
                               err_flux_array = self.err_flux_array,upper_limit_array = self.upper_limit_array,
                               dist = self.dist)
-    
+
     
               
     #TODO: Consider putting utilities in a class
