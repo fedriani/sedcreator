@@ -2309,7 +2309,7 @@ class ModelPlotter(FitterContainer):
         self.__best_model = None
 
 
-    def plot_best_sed(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',title=None,figname=None):
+    def plot_best_sed(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',markersize=6,title=None,figname=None):
         '''
         Plots the best SED model
         
@@ -2330,6 +2330,9 @@ class ModelPlotter(FitterContainer):
         marker: str
             defines the marker style and color like matplotlib. Default is 'k*'
 
+        markersize: int
+            defines the marker size. Default is 6
+            
         title: str, optional
             Defines the title of the plot. Default is None.
 
@@ -2359,7 +2362,7 @@ class ModelPlotter(FitterContainer):
         #to go out of the figure define a false 0.5 error for those marked as upper limit
         error_flux_for_SED_plot = self.err_flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
-        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,
+        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,markersize=markersize,
                      uplims=self.upper_limit_array)
         plt.xlim(xlim)
         plt.ylim(ylim)
@@ -2375,7 +2378,7 @@ class ModelPlotter(FitterContainer):
         plt.show()
 
         
-    def plot_multiple_seds(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',cmap='rainbow_r',colorbar=True,title=None,figname=None):
+    def plot_multiple_seds(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',markersize=6,cmap='rainbow_r',colorbar=True,title=None,figname=None):
         '''
         Plots multiple SEDs.
         
@@ -2395,6 +2398,9 @@ class ModelPlotter(FitterContainer):
             
         marker: str
             defines the marker style and color like matplotlib. Default is 'k*'
+            
+        markersize: int
+            defines the marker size. Default is 6
 
         cmap: str
             defines the colormap like matplotlib of the SEDs. Default is 'rainbow_r'
@@ -2443,7 +2449,7 @@ class ModelPlotter(FitterContainer):
         #to go out of the figure define a false 0.5 error for those marked as upper limit
         error_flux_for_SED_plot = self.err_flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
-        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,
+        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,markersize=markersize,
                      uplims=self.upper_limit_array)
         plt.xlim(xlim)
         plt.ylim(ylim)
@@ -2463,7 +2469,7 @@ class ModelPlotter(FitterContainer):
         plt.show()
     
     
-    def plot2d(self,models,figsize=(10,5),marker='s',marker_size=50,cmap='rainbow_r',title=None,figname=None):
+    def plot2d(self,models,figsize=(10,5),marker='s',markersize=50,cmap='rainbow_r',title=None,figname=None):
         '''
         2D Plots of the SEDs results.
         
@@ -2478,7 +2484,7 @@ class ModelPlotter(FitterContainer):
         marker: str
             defines the marker style like matplotlib. Default is 's'
 
-        marker_size: int
+        markersize: int
             defines the marker size. Default is 50
 
         cmap: str
@@ -2506,7 +2512,7 @@ class ModelPlotter(FitterContainer):
                            triple_MC_sigma['sigma'],
                            linewidths=1, alpha=.8,
                            #edgecolor='k',
-                           s = marker_size,
+                           s = markersize,
                            c=triple_MC_sigma['chisq'],
                            marker=marker,
                            norm=colors.LogNorm(),
@@ -2560,7 +2566,7 @@ class ModelPlotter(FitterContainer):
                            linewidths=1,
                            alpha=.8,
                            #edgecolor='k',
-                           s = marker_size,
+                           s = markersize,
                            c=triple_MC_ms['chisq'],
                            marker=marker,
                            norm=colors.LogNorm(),
@@ -2613,7 +2619,7 @@ class ModelPlotter(FitterContainer):
                            linewidths=1,
                            alpha=.8,
                            #edgecolor='k',
-                           s = marker_size,
+                           s = markersize,
                            c=triple_sigma_ms['chisq'],
                            marker=marker,
                            norm=colors.LogNorm(),
@@ -2672,7 +2678,7 @@ class ModelPlotter(FitterContainer):
             
         plt.show()
     
-    def plot3d(self,models,figsize=(8,8),marker_size=200,cmap='rainbow_r',title=None,figname=None):
+    def plot3d(self,models,figsize=(8,8),markersize=200,cmap='rainbow_r',title=None,figname=None):
         '''
         3D plot for the SED model results
         
@@ -2684,7 +2690,7 @@ class ModelPlotter(FitterContainer):
         figsize: tuple
             specify the size of the figure. Default is (8,8)
 
-        marker_size: int
+        markersize: int
             defines the marker size. Default is 200
 
         cmap: str
@@ -2710,7 +2716,7 @@ class ModelPlotter(FitterContainer):
                          np.log10(models['sigma']),
                          linewidths=1, alpha=.8,
                          edgecolor='k',
-                         s = marker_size,
+                         s = markersize,
                          c=models['chisq'],
                          norm=colors.LogNorm(),
                          cmap=cmap,
