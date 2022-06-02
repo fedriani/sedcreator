@@ -1003,15 +1003,15 @@ class SedFitter(object):
         mc: float
             mass of the core (Msun) for the SED to be retrieved. Allowed values are:
             [10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0]
-
+        
         sigma: float
             mass surface density of the clump (g/cm2) for the SED to be retrieved. Allowed values are:
             [0.1,0.316,1.0,3.16]
-
+        
         mstar: float
             mass of the star (Msun) for the SED to be retrieved. Allowed values are:
             [0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0]
-
+        
         theta_view: float
             viewing angle (deg) for the SED to be retrieved. Allowed values are:
             [12.84, 22.33, 28.96, 34.41, 39.19, 43.53, 47.55, 51.32, 54.90, 58.33,
@@ -1043,13 +1043,13 @@ class SedFitter(object):
         #database compose of this
         nmc=15
         mc_arr=np.array([10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0])
-
+        
         nsigma=4
         sigma_arr=np.array([0.1,0.316,1.0,3.16])
-
+        
         nmstar=14
         mstar_arr=np.array([0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0])
-
+        
         nmu=20
         mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
         mu_arr=mu_arr[::-1] #reversing the array
