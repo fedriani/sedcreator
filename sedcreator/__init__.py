@@ -992,11 +992,11 @@ class SedFitter(object):
                                   int(i[0:11][6:8]),int(i[0:11][9:11])])
         return(ALL_model_dat,ALL_model_idx)
 
-    def get_sed(self,mcore=10, sigma=0.1, mstar=0.5, theta_view=22.33, av=0,dist=1000, filter_array=None):
+    def get_sed(self, mcore=10, sigma=0.1, mstar=0.5, theta_view=22.33, av=0, dist=1000, filter_array=None):
         '''
         Retrive the SED for give physical parameters.
         Note that not all combinations of the parameters are present in the models database,
-        an error will be raised, please try with other combination
+        an error will be raised, please try with other combination.
         
         Parameters
         ----------
@@ -1015,7 +1015,7 @@ class SedFitter(object):
         theta_view: float
             viewing angle (deg) for the SED to be retrieved. Allowed values are:
             [12.84, 22.33, 28.96, 34.41, 39.19, 43.53, 47.55, 51.32, 54.90, 58.33,
-             61.64, 64.85, 67.98, 71.03, 74.04, 77.00, 79.92, 82.82, 85.70, 88.57]
+            61.64, 64.85, 67.98, 71.03, 74.04, 77.00, 79.92, 82.82, 85.70, 88.57]
             
         Av: float
             visual extintion (mag) for the SED to be extincted. Allowed values are:
@@ -1028,8 +1028,8 @@ class SedFitter(object):
         Returns
         ----------
         lambda_model, flux_model_extincted : (array,array)
-            wavelength and flux for the selected physical parameters
-            If filter_array is not None, lambda_model, flux_model_extincted have the same length as filter_array.
+        wavelength and flux for the selected physical parameters
+        If filter_array is not None, lambda_model, flux_model_extincted have the same length as filter_array.
         '''
         
         #loading here SED model files, extinction law, default parameters
