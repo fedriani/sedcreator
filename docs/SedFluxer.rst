@@ -37,6 +37,8 @@ with the aperture and annulus defined::
     >>> flux.plot()
     >>> flux.info
 
+The data used in this example can be accessed at this `link <https://github.com/fedriani/sedcreator/tree/main/examples/AFGL2591_data>`
+
 Below is given a short example::
 
     >>> from sedcreator import SedFluxer
@@ -45,21 +47,21 @@ Below is given a short example::
     >>> from astropy.coordinates import SkyCoord
     >>> import astropy.units as u
 
-    >>> filename = get_pkg_data_filename('galactic_center/gc_msx_e.fits')
+    >>> filename = '../examples/AFGL2591_data/AFGL2591_Herschel_70.fits'
 
-    >>> hdu = pyfits.open(filename)[0]
+    >>> hdu = pyfits.open(filename)[1]
 
-    >>> GC = SkyCoord(l='00:00:00.00', b='00:00:00.00', unit=(u.deg, u.deg),frame='galactic')
-    >>> GC_fluxer = SedFluxer(hdu)
+    >>> AFGL2591_coords = SkyCoord(ra='20h29m24.8916s', dec='+40d11m19.388s', frame='fk5')
+    >>> AFGL2591_fluxer = SedFluxer(hdu)
 
-    >>> aperture_radius = 300.0#arcsec
-    >>> GC_flux = GC_fluxer.get_raw_flux(central_coords=GC,
-    ...                                  aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
-    ...                                  outer_annu=2.0*aperture_radius)
+    >>> aperture_radius = 25.0#arcsec
+    >>> AFGL2591_H70_gt = AFGL2591_fluxer.get_flux(central_coords=GC,
+    ...                                  	       aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
+    ...                                  	       outer_annu=2.0*aperture_radius)
 
 The plot should look like::
 
-    >>> GC_flux.plot(cmap='rainbow')
+    >>> AFGL2591_H70_gt.plot(cmap='rainbow')
 
 .. plot::
    :context: close-figs
@@ -67,47 +69,47 @@ The plot should look like::
    :include-source: False
 
     >>> from sedcreator import SedFluxer
-    >>> from astropy.utils.data import get_pkg_data_filename
     >>> from astropy.io import fits as pyfits
     >>> from astropy.coordinates import SkyCoord
     >>> import astropy.units as u
 
-    >>> filename = get_pkg_data_filename('galactic_center/gc_msx_e.fits')
+    >>> filename = '../examples/AFGL2591_data/AFGL2591_Herschel_70.fits'
 
-    >>> hdu = pyfits.open(filename)[0]
+    >>> hdu = pyfits.open(filename)[1]
 
-    >>> GC = SkyCoord(l='00:00:00.00', b='00:00:00.00', unit=(u.deg, u.deg),frame='galactic')
-    >>> GC_fluxer = SedFluxer(hdu)
+    >>> AFGL2591_coords = SkyCoord(ra='20h29m24.8916s', dec='+40d11m19.388s', frame='fk5')
+    >>> AFGL2591_fluxer = SedFluxer(hdu)
 
-    >>> aperture_radius = 300.0#arcsec
-    >>> GC_flux = GC_fluxer.get_raw_flux(central_coords=GC,
-    ...                                  aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
-    ...                                  outer_annu=2.0*aperture_radius)
-    >>> GC_flux.plot(cmap='rainbow')
+    >>> aperture_radius = 25.0#arcsec
+    >>> AFGL2591_H70_gt = AFGL2591_fluxer.get_flux(central_coords=AFGL2591_coords,
+    ...                                  	       aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
+    ...                                  	       outer_annu=2.0*aperture_radius)
+
+    >>> AFGL2591_H70_gt.plot(cmap='rainbow')
 
 And printing the info::
 
-    >>> GC_flux.info  # doctest: +FLOAT_CMP
-    The aperture used is 300.0 arcsec
-    pixel scale is 24.0 arcsec/pixel
-    ~ 12.5 pixels are used for the aperture radius
-    units in the image are: W/m^2-sr
+    >>> AFGL2591_H70_gt.info  # doctest: +FLOAT_CMP
+    The aperture used is 25.0 arcsec
+    pixel scale is 3.2 arcsec/pixel
+    ~ 7.812 pixels are used for the aperture radius
+    units in the image are: Jy/pixel
     Regarding observing time:
     You are probably using HERSCHEL, look at the first extension of the header
     Regarding wavelength:
     You are probably using HERSCHEL or ALMA, look at the first extension of the header
     ############################
-    Flux bkg sub 0.04420493760862438 unitless
-    Flux         0.05151128117223151 unitless
-    Background   0.007306343563607133 unitless
+    Flux bkg sub 4920.804203524983 Jy
+    Flux         5060.075065156685 Jy
+    Background   139.27086163170225 Jy
     ############################
 
 And finally retrieve the fluxes (background subtracted, and without background subtraction) for our own calculations
 (and use with the SedFitter class)::
 
-    >>> flux_bkg_sub,flux = GC_flux.get_value()
+    >>> flux_bkg_sub,flux = AFGL2591_H70_gt.get_value()
     >>> print(flux_bkg_sub,flux)  # doctest: +FLOAT_CMP
-    0.04420493760862438 0.05151128117223151
+    4920.804203524983 5060.075065156685
 
 
 	
