@@ -12,25 +12,26 @@ This algorithm aims to provide aperture sizes that are reproducible and that are
 To use the function, we just need to initialise the ``SedFluxer`` object with the image of interest and call the function, defining the central coordinates where we want to find the optimal aperture and the rest of parameters::
 
     >>> from sedcreator import SedFluxer
-    >>> from astropy.utils.data import get_pkg_data_filename
     >>> from astropy.io import fits as pyfits
     >>> from astropy.coordinates import SkyCoord
     >>> import astropy.units as u
 
-    >>> filename = get_pkg_data_filename('galactic_center/gc_msx_e.fits')
+    >>> filename = '../examples/AFGL2591_data/AFGL2591_Herschel_70.fits'
 
-    >>> hdu = pyfits.open(filename)[0]
+    >>> hdu = pyfits.open(filename)[1]
 
-    >>> GC = SkyCoord(l='359.95', b='-0.045', unit=(u.deg, u.deg),frame='galactic')
-    >>> GC_fluxer = SedFluxer(hdu)
+    >>> AFGL2591_coords = SkyCoord(ra='20h29m24.8916s', dec='+40d11m19.388s', frame='fk5')
+    >>> AFGL2591_fluxer = SedFluxer(hdu)
 
-    >>> aperture_radius = GC_fluxer.get_optimal_aperture(central_coords=GC, ap_inner=5.0, ap_outer=100.0,
-    ...                                                  step_size=5.0, aper_increase=1.3, threshold=1.1,
-    ...                                                  profile_plot=False)
-    >>> GC_flux = GC_fluxer.get_raw_flux(central_coords=GC,
-    ...                                  aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
-    ...                                  outer_annu=2.0*aperture_radius)
-    >>> GC_flux.plot(cmap='rainbow')
+    >>> aperture_radius = AFGL2591_fluxer.get_optimal_aperture(central_coords=AFGL2591_coords, ap_inner=5.0, ap_outer=60.0,
+    ...                                                        step_size=0.25, aper_increase=1.3, threshold=1.1,
+    ...                                                        profile_plot=False)
+    
+    >>> AFGL2591_H70_gt = AFGL2591_fluxer.get_flux(central_coords=AFGL2591_coords,
+    ...                                            aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
+    ...                                            outer_annu=2.0*aperture_radius)
+    
+    >>> AFGL2591_H70_gt.plot(cmap='rainbow')
 
 .. plot::
 
@@ -39,31 +40,30 @@ To use the function, we just need to initialise the ``SedFluxer`` object with th
    :include-source: False
 
     >>> from sedcreator import SedFluxer
-    >>> from astropy.utils.data import get_pkg_data_filename
     >>> from astropy.io import fits as pyfits
     >>> from astropy.coordinates import SkyCoord
     >>> import astropy.units as u
 
-    >>> filename = get_pkg_data_filename('galactic_center/gc_msx_e.fits')
+    >>> filename = '../examples/AFGL2591_data/AFGL2591_Herschel_70.fits'
 
-    >>> hdu = pyfits.open(filename)[0]
+    >>> hdu = pyfits.open(filename)[1]
 
-    >>> GC = SkyCoord(l='359.95', b='-0.045', unit=(u.deg, u.deg),frame='galactic')
-    >>> GC_fluxer = SedFluxer(hdu)
+    >>> AFGL2591_coords = SkyCoord(ra='20h29m24.8916s', dec='+40d11m19.388s', frame='fk5')
+    >>> AFGL2591_fluxer = SedFluxer(hdu)
 
-    >>> aperture_radius = GC_fluxer.get_optimal_aperture(central_coords=GC, ap_inner=5.0, ap_outer=100.0,
-    ...                                                  step_size=5.0, aper_increase=1.3, threshold=1.1,
-    ...                                                  profile_plot=False)
-    >>> GC_flux = GC_fluxer.get_raw_flux(central_coords=GC,
-    ...                                  aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
-    ...                                  outer_annu=2.0*aperture_radius)
-    >>> GC_flux.plot(cmap='rainbow')
+    >>> aperture_radius = AFGL2591_fluxer.get_optimal_aperture(central_coords=AFGL2591_coords, ap_inner=5.0, ap_outer=100.0,
+    ...                                                        step_size=5.0, aper_increase=1.3, threshold=1.1,
+    ...                                                        profile_plot=False)
+    
+    >>> AFGL2591_H70_gt = AFGL2591_fluxer.get_flux(central_coords=AFGL2591_coords,
+    ...                                            aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
+    ...                                            outer_annu=2.0*aperture_radius)
 
 One can also generate the plot of enclosed flux version radius by setting ``profile_plot=True``::
 
-    >>> aperture_radius = GC_fluxer.get_optimal_aperture(central_coords=GC, ap_inner=5.0, ap_outer=100.0,
-    ...                                                  step_size=5.0, aper_increase=1.3, threshold=1.1,
-    ...                                                  profile_plot=True)
+    >>> aperture_radius = AFGL2591_fluxer.get_optimal_aperture(central_coords=AFGL2591_coords, ap_inner=5.0, ap_outer=60.0,
+    ...                                                        step_size=0.25, aper_increase=1.3, threshold=1.1,
+    ...                                                        profile_plot=True)
 
 .. plot::
 
@@ -72,21 +72,20 @@ One can also generate the plot of enclosed flux version radius by setting ``prof
    :include-source: False
 
     >>> from sedcreator import SedFluxer
-    >>> from astropy.utils.data import get_pkg_data_filename
     >>> from astropy.io import fits as pyfits
     >>> from astropy.coordinates import SkyCoord
     >>> import astropy.units as u
 
-    >>> filename = get_pkg_data_filename('galactic_center/gc_msx_e.fits')
+    >>> filename = '../examples/AFGL2591_data/AFGL2591_Herschel_70.fits'
 
-    >>> hdu = pyfits.open(filename)[0]
+    >>> hdu = pyfits.open(filename)[1]
 
-    >>> GC = SkyCoord(l='359.95', b='-0.045', unit=(u.deg, u.deg),frame='galactic')
-    >>> GC_fluxer = SedFluxer(hdu)
+    >>> AFGL2591_coords = SkyCoord(ra='20h29m24.8916s', dec='+40d11m19.388s', frame='fk5')
+    >>> AFGL2591_fluxer = SedFluxer(hdu)
 
-    >>> aperture_radius = GC_fluxer.get_optimal_aperture(central_coords=GC, ap_inner=5.0, ap_outer=100.0,
-    ...                                                  step_size=5.0, aper_increase=1.3, threshold=1.1,
-    ...                                                  profile_plot=True)
+    >>> aperture_radius = AFGL2591_fluxer.get_optimal_aperture(central_coords=AFGL2591_coords, ap_inner=5.0, ap_outer=60.0,
+    ...                                                        step_size=0.25, aper_increase=1.3, threshold=1.1,
+    ...                                                        profile_plot=True)
 
     >>> print('Optimal aperture is',aperture_radius,'arcsec')
 
