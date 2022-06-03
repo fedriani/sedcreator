@@ -1803,6 +1803,31 @@ class SedFitter(object):
             pyfits.writeto(master_dir+'Model_SEDs/flux_filt/'+filter_name+'.fits',flux_model_conv)
 
 
+    def remove_filter(self,filter_name=None):
+        '''
+        Removes a given filter from the database
+        
+        Parameters
+        ----------
+        filter_name: str
+                string with the name of the filter.
+        '''
+        
+        master_dir = self.master_dir
+        
+        existing_filters = os.listdir(master_dir+'/Model_SEDs/parfiles/')
+        
+        if filter_name+'.txt' in existing_filters:
+            filters_table = ascii.read(master_dir+'/Model_SEDs/parfiles/filter_default.dat')
+            filters_table.remove_row(np.argwhere(filters_table['filter']==filter_name)[0][0])
+            os.remove(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt')
+            os.remove(master_dir+'/Model_SEDs/flux_filt/'+filter_name+'.fits')
+            ascii.write(filters_table,'/opt/anaconda3/lib/python3.7/site-packages/sedcreator/Model_SEDs/parfiles/filter_default.dat', overwrite=True)
+            print('The filter', filter_name,'has been removed from the database')
+        else:
+            print('WARNING! The input filter is not in the database')
+
+
     def plot_filter(self,filter_name,figsize=(6,4),legend=False,title=None,figname=None):
         '''
         Plots a filter in the database. To see the available filter use SedFitter().print_default_filters
