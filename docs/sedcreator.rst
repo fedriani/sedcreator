@@ -1,5 +1,5 @@
 ************
-sedcreator
+full documentation to sedcreator
 ************
 
 .. automodule:: sedcreator.__init__
