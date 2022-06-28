@@ -1757,7 +1757,7 @@ class SedFitter(object):
         #For the IDL method we need the convolved fluxes for the new filter in a fits file
         #(this is a translation from the IDL script filtflux.pro)
         #Note that this is not needed for the new method as it convolves on the fly
-                existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
+        existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
         
         if filter_name+'.fits' in existing_FITS_filters:
             print('WARNING! The filter file ' + filter_name + '.fits already exists in the database')
