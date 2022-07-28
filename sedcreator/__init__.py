@@ -798,7 +798,7 @@ class FitterContainer():
                         
         models = self.models_array
         master_dir = self.master_dir
-        norm_etxc_law = self.extc_law
+        norm_extc_law = self.extc_law
         dist = self.dist
         
         nmu=20
@@ -828,7 +828,7 @@ class FitterContainer():
             nu_model=c_micron_s/lambda_model #s-1
             flux_model = sed[1] #Lsun
             lbol_iso = np.trapz(y=flux_model/nu_model,x=nu_model) #bolometric luminosity of the unextincted SED
-            flux_model_extincted = flux_model*10.0**(-0.4*av*norm_etxc_law) #Lsun extincted
+            flux_model_extincted = flux_model*10.0**(-0.4*av*norm_extc_law) #Lsun extincted
             lbol_av = np.trapz(y=flux_model_extincted/nu_model,x=nu_model) #bolometric luminosity of the extincted SED
             
             mcore,sigma,mstar,rcore,massenv,theta_w,rstar,lstar,tstar,mdisk,rdisk,mdotd,lbol,tnow = model_dat
@@ -849,7 +849,7 @@ class FitterContainer():
                 nu_model=c_micron_s/lambda_model #s-1
                 flux_model = sed[1] #Lsun
                 lbol_iso = np.trapz(y=flux_model/nu_model,x=nu_model) #bolometric luminosity of the unextincted SED
-                flux_model_extincted = flux_model*10.0**(-0.4*av*norm_etxc_law) #Lsun extincted
+                flux_model_extincted = flux_model*10.0**(-0.4*av*norm_extc_law) #Lsun extincted
                 lbol_av = np.trapz(y=flux_model_extincted/nu_model,x=nu_model) #bolometric luminosity of the extincted SED
                 
                 mcore,sigma,mstar,rcore,massenv,theta_w,rstar,lstar,tstar,mdisk,rdisk,mdotd,lbol,tnow = model_dat
@@ -1512,7 +1512,7 @@ class SedFitter(object):
                 
                 for av in AV_array:
                     #extincting the model flux using the av value from AV_array
-                    #and the normalised (in Vband) etxc_law
+                    #and the normalised (in Vband) extc_law
                     flux_model_Jy_log_extincted = flux_model_Jy_log-0.4*av*norm_extc_law
 
                     flux_model_Jy_extincted_log_CONV = self.sed_convolution(FILTER_wave_resp,
