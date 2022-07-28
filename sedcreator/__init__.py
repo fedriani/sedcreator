@@ -964,27 +964,35 @@ class SedFitter(object):
                  upper_limit_array=None,
                  filter_array=None):
 
-        #Checks to ensure inputs are correct
-        if any(lambda_array<0):
-            raise ValueError("A value in the lambda array is negative, please check")
-        if any(np.isnan(lambda_array)):
-            raise ValueError("A value in the lambda array is nan, please check")
-            
-        if any(flux_array<0):
-            raise ValueError("A value in the flux array is negative, please check")
-        if any(np.isnan(flux_array)):
-            raise ValueError("A value in the flux array is nan, please check")
 
-        if any(np.isnan(err_flux_array)):
-            raise ValueError("A value in the error flux array is nan, please check")
+        #Checks to ensure inputs are correct
+        if lambda_array is not None:
+            if any(lambda_array<0):
+                raise ValueError("A value in the lambda array is negative, please check")
+            if any(np.isnan(lambda_array)):
+                raise ValueError("A value in the lambda array is nan, please check")
+        if flux_array is not None:
+            if any(flux_array<0):
+                raise ValueError("A value in the flux array is negative, please check")
+            if any(np.isnan(flux_array)):
+                raise ValueError("A value in the flux array is nan, please check")
+        if err_flux_array is not None:
+            if any(np.isnan(err_flux_array)):
+                raise ValueError("A value in the error flux array is nan, please check")
         
         #Check length of arrays are the same
         #based on: https://stackoverflow.com/questions/35791051/better-way-to-check-if-all-lists-in-a-list-are-the-same-length
-        lists = (lambda_array,flux_array,err_flux_array,upper_limit_array,filter_array)
-        it = iter(lists)
-        the_len = len(next(it))
-        if not all(len(l) == the_len for l in it):
-            raise ValueError('not all arrays have same length!, please check')
+        if lambda_array is not None:
+            lists = (lambda_array,flux_array,err_flux_array,upper_limit_array,filter_array)
+            it = iter(lists)
+            the_len = len(next(it))
+            if not all(len(l) == the_len for l in it):
+                raise ValueError('not all arrays have same length!, please check')
+            
+        #making sure upper limits array is bool
+        if upper_limit_array is not None:
+            if not upper_limit_array.dtype=='bool':
+                upper_limit_array = np.array(upper_limit_array,dtype=bool)
 
 
         self.lambda_array = lambda_array
