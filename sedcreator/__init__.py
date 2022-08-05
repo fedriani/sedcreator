@@ -170,7 +170,7 @@ class FluxerContainer():
             print('')
 
         
-    def plot(self,cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',plot_mask=False,title=None,figname=None):
+    def plot(self,figsize=(6,4),cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',plot_mask=False,title=None,figname=None):
         '''
         Plots the used image together with the aperture used for the flux
         and the annulus for the background subtraction.
@@ -209,7 +209,7 @@ class FluxerContainer():
         data,header = self.data
         mask = self.mask
         
-        plt.figure()
+        plt.figure(figsize=figsize)
         plt.subplot(projection=self.wcs_header)
         #This is to get around no good stretch for SOFIA images
         if 'OBSERVAT' in header:
