@@ -179,13 +179,19 @@ class FluxerContainer():
         ----------
         cmap: str
             Color map from matplolib to be used in the image. Default is 'gray'
+            
+        figsize: tuple
+            specify the size of the figure. Default is (6,4)
+            
         stretch: {'linear', 'sqrt', 'power', 'log', 'asinh'}, optional
             The stretch function to apply to the image. The default is 'log'.
+            
         percent: float, optional
             The percentage of the image values used to determine the pixel values
             of the minimum and maximum cut levels. The lower cut level will set at the
             (100 - percent) / 2 percentile, while the upper cut level will be set at the
             (100 + percent) / 2 percentile. The default is 100.0.
+            
         aperture_color: str
                     Circular aperture color to show in the image. Default is 'black'
                     
