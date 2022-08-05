@@ -2528,8 +2528,10 @@ class ModelPlotter(FitterContainer):
             cbar.minorticks_off()
             cbar.set_ticks(np.logspace(np.log10(models['chisq'].min()),
                                        np.log10(models['chisq'].max()),num=5))
+            #trick to consider the adecuate number of decimals in round
+            dec = int(np.floor(np.abs(np.log10(models['chisq'].min()))))+1 #it has to be an integer
             cbar.set_ticklabels(np.around(np.logspace(np.log10(models['chisq'].min()),
-                                                      np.log10(models['chisq'].max()),num=5),decimals=2))
+                                                      np.log10(models['chisq'].max()),num=5),decimals=dec))
         if figname is not None:
             plt.savefig(figname, dpi=300, bbox_inches="tight")
             print('Image saved in ',figname)
@@ -2736,9 +2738,10 @@ class ModelPlotter(FitterContainer):
         cbar.minorticks_off()
         cbar.set_ticks(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
                                    np.log10(triple_sigma_ms['chisq'].max()),num=5))
+        #trick to consider the adecuate number of decimals in round
+        dec = int(np.floor(np.abs(np.log10(triple_sigma_ms['chisq'].min()))))+1 #it has to be an integer
         cbar.set_ticklabels(np.around(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
-                                                  np.log10(triple_sigma_ms['chisq'].max()),num=5),decimals=2))
-        
+                                                  np.log10(triple_sigma_ms['chisq'].max()),num=5),decimals=dec))
         if title is not None:
             fig.suptitle(title,y=0.8)
             
