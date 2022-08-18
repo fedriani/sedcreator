@@ -1031,8 +1031,7 @@ class SedFitter(object):
                  err_flux_array=None,
                  upper_limit_array=None,
                  filter_array=None):
-
-
+        
         #Checks to ensure inputs are correct
         if lambda_array is not None:
             lambda_array=np.array(lambda_array)
@@ -1048,6 +1047,8 @@ class SedFitter(object):
                 raise ValueError("A value in the flux array is nan, please check")
         if err_flux_array is not None:
             err_flux_array=np.array(err_flux_array)
+            if any(flux_array<0):
+                raise ValueError("A value in the error flux array is negative, please check")
             if any(np.isnan(err_flux_array)):
                 raise ValueError("A value in the error flux array is nan, please check")
         
@@ -1060,14 +1061,12 @@ class SedFitter(object):
             if not all(len(l) == the_len for l in it):
                 raise ValueError('not all arrays have same length!, please check')
             
-            
         #making sure upper limits array is bool
         if upper_limit_array is not None:
             upper_limit_array=np.array(upper_limit_array)
             if not upper_limit_array.dtype=='bool':
                 upper_limit_array = np.array(upper_limit_array,dtype=bool)
-
-
+        
         self.lambda_array = lambda_array
         self.flux_array = flux_array
         self.err_flux_array = err_flux_array
@@ -1094,8 +1093,8 @@ class SedFitter(object):
             ALL_model_idx.append([int(i[0:11][0:2]),int(i[0:11][3:5]),
                                   int(i[0:11][6:8]),int(i[0:11][9:11])])
         return(ALL_model_dat,ALL_model_idx)
-
-    def get_sed(self, mcore=10, sigma=0.1, mstar=0.5, theta_view=22.33, av=0, dist=1000, filter_array=None):
+    
+    def get_sed(self,mcore=10, sigma=0.1, mstar=0.5, theta_view=22.33, av=0,dist=1000, filter_array=None):
         '''
         Retrive the SED for give physical parameters.
         Note that not all combinations of the parameters are present in the models database,
@@ -1265,7 +1264,7 @@ class SedFitter(object):
                              'is not in the database, please try another combination')
         
         return(lambda_model,flux_model_extincted)
-
+            
     @property
     def print_default_filters(self):
         if self.__print_default_filters is None:
@@ -1348,7 +1347,14 @@ class SedFitter(object):
         lambda_array_model = self.lambda_array_model
         sed_lambda_model = self.sed_lambda_model
 
-        flux_model_log_extc = flux_model_log-0.4*av*norm_extc_law
+        treat_errors = self.treat_errors
+        
+        #including differentiation between log and linear space
+        if treat_errors=='log':
+            flux_model_log_extc = flux_model_log-0.4*av*norm_extc_law
+        else:
+            flux_model_log_extc = flux_model_log*10**(-0.4*av*norm_extc_law)
+            
         flux_model_log_extc_conv = self.sed_convolution(FILTER_wave_resp,
                                                         lambda_array_model,
                                                         sed_lambda_model,
@@ -1363,36 +1369,72 @@ class SedFitter(object):
         This equation is used to compute the chisq stored in the tables.
         '''
 
-        flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
-        errup_fit_log_arr=np.log10(1.+self.err_flux_array,dtype=np.float64)# this is absolute error in log space
-        errlo_fit_log_arr=-np.log10(1.-self.err_flux_array,dtype=np.float64)# note 100% error means a infinite lower error in log
-
-        #these two lines are to avoid singularities in the case of error=0
-        errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
-        errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
+        treat_errors = self.treat_errors
         
-        #this line is to avoid nan in log10(negative_value), we set it to very high number
-        errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
-        
-        nfit = len(self.upper_limit_array) #total number of points
-#         nfit_nonlimit = len(self.upper_limit_array[self.upper_limit_array==0]) #total number of points that are NON upper limits
-        errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-        errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+        if treat_errors=='log':
+            #preparing the fluxes and errors in log space
+            flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
+            percentage_error = self.err_flux_array/self.flux_array
+            errup_fit_log_arr=np.log10(1.0+percentage_error,dtype=np.float64)# this is absolute error in log space
+            errlo_fit_log_arr=-np.log10(1.0-percentage_error,dtype=np.float64)# note 100% error means a infinite lower error in log
 
+            #these two lines are to avoid singularities in the case of error=0
+            errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
+            errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
 
-        flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            #this line is to avoid nan in log10(negative_value), we set it to very high number
+            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
 
-        up_err_for_chisq = flux_model_ext_conv>=flux_fit_log_arr
-        errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+self.err_flux_array[up_err_for_chisq],dtype=np.float64)
-        chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0/errup_fit_log_arr[up_err_for_chisq]**2.0)
+            nfit = len(self.upper_limit_array) #total number of points
+            errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
+            errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            
+            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
 
-        lo_err_for_chisq = flux_model_ext_conv<flux_fit_log_arr
-        chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0/errlo_fit_log_arr[lo_err_for_chisq]**2.0)
-        
-        chisq = (chisq_up+chisq_lo)/float(nfit)
+            up_err_for_chisq = flux_model_ext_conv>=flux_fit_log_arr
+            percentage_error_up = self.err_flux_array[up_err_for_chisq]/self.flux_array[up_err_for_chisq]
+            errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
+            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0\
+                              /errup_fit_log_arr[up_err_for_chisq]**2.0)
 
-        nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30]) #updating the number of points considered to be upper limits
-        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+            lo_err_for_chisq = flux_model_ext_conv<flux_fit_log_arr
+            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0\
+                              /errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+
+            chisq = (chisq_up+chisq_lo)/float(nfit)
+
+            nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30]) #updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+            
+        else:
+            #preparing the fluxes and errors in linear space
+            flux_fit_arr=self.flux_array
+            errup_fit_arr=self.err_flux_array# this is absolute error in linear space
+            errlo_fit_arr=self.err_flux_array# this is absolute error in linear space
+            
+            nfit = len(self.upper_limit_array) #total number of points
+            errup_fit_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
+            errlo_fit_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+
+            #these two lines are to avoid singularities in the case of error=0
+            errup_fit_arr[errup_fit_arr==0.0]=1.0e-33
+            errlo_fit_arr[errlo_fit_arr==0.0]=1.0e-33
+            
+            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            
+            up_err_for_chisq = flux_model_ext_conv>=flux_fit_arr
+            errup_fit_arr[up_err_for_chisq] = self.err_flux_array[up_err_for_chisq]
+            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_arr[up_err_for_chisq])**2.0\
+                              /errup_fit_arr[up_err_for_chisq]**2.0)
+
+            lo_err_for_chisq = flux_model_ext_conv<flux_fit_arr
+            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_arr[lo_err_for_chisq])**2.0\
+                              /errlo_fit_arr[lo_err_for_chisq]**2.0)
+
+            chisq = (chisq_up+chisq_lo)/float(nfit)
+
+            nfit_nonlimit = len(errup_fit_arr[errup_fit_arr<1.0e30]) #updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
         return([chisq,chisq_nonlimit])
 
@@ -1401,43 +1443,79 @@ class SedFitter(object):
         '''
         chisq function to be used with scipy.optmize.minimize function.
         Note the slight change in sysntax from chisq() function above.
-        It short it is exactly the same, but the parameters are called in a different order.
+        In short it is exactly the same, but the parameters are called in a different order.
         '''
-
-        flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
-        errup_fit_log_arr=np.log10(1.+self.err_flux_array,dtype=np.float64)# this is absolute error in log space
-        errlo_fit_log_arr=-np.log10(1.-self.err_flux_array,dtype=np.float64)# note 100% error means a infinite lower error in log
         
-        #these two lines are to avoid singularities in the case of error=0
-        errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
-        errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
+        treat_errors = self.treat_errors
         
-        #this line is to avoid nan in log10(negative_value), we set it to very high number
-        errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
+        if treat_errors=='log':
+            #preparing the fluxes and errors in log space
+            flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
+            percentage_error = self.err_flux_array/self.flux_array
+            errup_fit_log_arr=np.log10(1.+percentage_error,dtype=np.float64)# this is absolute error in log space
+            errlo_fit_log_arr=-np.log10(1.-percentage_error,dtype=np.float64)# note 100% error means a infinite lower error in log
 
-        nfit = len(self.upper_limit_array) #total number of points
-#         nfit_nonlimit = len(self.upper_limit_array[self.upper_limit_array==0]) #total number of points that are NON upper limits
-        errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-        errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            #these two lines are to avoid singularities in the case of error=0
+            errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
+            errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
 
+            #this line is to avoid nan in log10(negative_value), we set it to very high number
+            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
 
-        flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            nfit = len(self.upper_limit_array) #total number of points
+            errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
+            errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
 
-        up_err_for_chisq = flux_model_ext_conv>=flux_fit_log_arr
-        errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+self.err_flux_array[up_err_for_chisq],dtype=np.float64)
-        chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0/errup_fit_log_arr[up_err_for_chisq]**2.0)
+            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
 
-        lo_err_for_chisq = flux_model_ext_conv<flux_fit_log_arr
-        chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0/errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+            up_err_for_chisq = flux_model_ext_conv>=flux_fit_log_arr
+            percentage_error_up = self.err_flux_array[up_err_for_chisq]/self.flux_array[up_err_for_chisq]
+            errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
+            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0\
+                              /errup_fit_log_arr[up_err_for_chisq]**2.0)
 
-        chisq = (chisq_up+chisq_lo)/float(nfit)
+            lo_err_for_chisq = flux_model_ext_conv<flux_fit_log_arr
+            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0\
+                              /errlo_fit_log_arr[lo_err_for_chisq]**2.0)
 
-        nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30]) #updating the number of points considered to be upper limits
-        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+            chisq = (chisq_up+chisq_lo)/float(nfit)
+
+            nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30]) #updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+
+        else:
+            #preparing the fluxes and errors in linear space
+            flux_fit_arr=self.flux_array
+            errup_fit_arr=self.err_flux_array# this is absolute error in linear space
+            errlo_fit_arr=self.err_flux_array# this is absolute error in linear space
+            
+            nfit = len(self.upper_limit_array) #total number of points
+            errup_fit_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
+            errlo_fit_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+
+            #these two lines are to avoid singularities in the case of error=0
+            errup_fit_arr[errup_fit_arr==0.0]=1.0e-33
+            errlo_fit_arr[errlo_fit_arr==0.0]=1.0e-33
+
+            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            
+            up_err_for_chisq = flux_model_ext_conv>=flux_fit_arr
+            errup_fit_arr[up_err_for_chisq] = self.err_flux_array[up_err_for_chisq]
+            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_arr[up_err_for_chisq])**2.0\
+                              /errup_fit_arr[up_err_for_chisq]**2.0)
+
+            lo_err_for_chisq = flux_model_ext_conv<flux_fit_arr
+            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_arr[lo_err_for_chisq])**2.0\
+                              /errlo_fit_arr[lo_err_for_chisq]**2.0)
+
+            chisq = (chisq_up+chisq_lo)/float(nfit)
+
+            nfit_nonlimit = len(errup_fit_arr[errup_fit_arr<1.0e30]) #updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
         return(chisq)
     
-    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',avopt=0):
+    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',treat_errors='log',avopt=0):
         #TODO: write proper function description.
         '''
         Fits the SED observations to the Z&T18 set of models
@@ -1478,25 +1556,12 @@ class SedFitter(object):
         if method not in ('grid_search', 'idl', 'minimize'):
             raise ValueError("'method' must be either 'minimize', 'grid_search' or 'idl'")
         
+        if treat_errors not in ('log', 'linear'):
+            raise ValueError("'treat_errors' must be either 'log' or 'linear'")
+        
         self.dist = dist
-        
-        #preparing the fluxes and errors in log space
-        flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
-        errup_fit_log_arr=np.log10(1.+self.err_flux_array,dtype=np.float64)# this is absolute error in log space
-        errlo_fit_log_arr=-np.log10(1.-self.err_flux_array,dtype=np.float64)# note 100% error means a infinite lower error in log
-
-        #these two lines are to avoid singularities in the case of error=0
-        errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
-        errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
-        
-        #this line is to avoid nan in log10(negative_value), we set it to very high number
-        errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
-        
-        nfit = len(self.upper_limit_array) #total number of points
-        nfit_nonlimit = len(self.upper_limit_array[self.upper_limit_array==0]) #total number of points that are NON upper limits
-        errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-        errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
-
+        self.treat_errors = treat_errors
+            
         #Creating the AV array, simply from AV_min to AV_max in steps of 1
         if AV_min<0:
             raise ValueError("AV_min must be greater or equal than 0.0")
@@ -1542,6 +1607,39 @@ class SedFitter(object):
 
         FULL_MODEL = []
 
+        if treat_errors=='log':
+            #preparing the fluxes and errors in log space
+            flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
+            
+            percentage_error = self.err_flux_array/self.flux_array
+            errup_fit_log_arr=np.log10(1.+percentage_error,dtype=np.float64)# this is absolute error in log space
+            errlo_fit_log_arr=-np.log10(1.-percentage_error,dtype=np.float64)# note 100% error means a infinite lower error in log
+
+            #these two lines are to avoid singularities in the case of error=0
+            errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
+            errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
+
+            #this line is to avoid nan in log10(negative_value), we set it to very high number
+            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
+
+            errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
+            errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            
+        else:
+            #NOTE: We keep the same names as above even though they are linear now
+            #preparing the fluxes and errors in linear space
+            flux_fit_arr=self.flux_array
+            errup_fit_arr=self.err_flux_array# this is absolute error in linear space
+            errlo_fit_arr=self.err_flux_array# this is absolute error in linear space
+            
+            #these two lines are to avoid singularities in the case of error=0
+            errup_fit_arr[errup_fit_arr==0.0]=1.0e-33
+            errlo_fit_arr[errlo_fit_arr==0.0]=1.0e-33
+
+            errup_fit_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
+            errlo_fit_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+
+        nfit = len(self.upper_limit_array) #total number of points
 
         if method == 'minimize':
             for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA)):
@@ -1552,19 +1650,31 @@ class SedFitter(object):
                 fnorm=1.0/(4.0*np.pi)/self.dist**2/pc2cm/pc2cm*Lsun2erg_s
                 modelflux_arr1=sed_flux_model*fnorm # now in erg/s/cm^2. It was in Lsun
                 flux_model_Jy=modelflux_arr1/c_micron_s*self.sed_lambda_model/Jy2erg_s_cm2# now in Jy
-                flux_model_Jy_log=np.log10(flux_model_Jy,dtype=np.float64)
+                
+                if treat_errors=='log':
+                    flux_model_Jy_log=np.log10(flux_model_Jy,dtype=np.float64)
 
-                #TEMPORARY FIX TO AVOID CURVE FIT TO DIE
-                flux_model_Jy_log[flux_model_Jy_log==np.inf]=1.0e33
-                flux_model_Jy_log[flux_model_Jy_log==-np.inf]=1.0e-33
+                    #TEMPORARY FIX TO AVOID CURVE FIT TO DIE
+                    flux_model_Jy_log[flux_model_Jy_log==np.inf]=1.0e33
+                    flux_model_Jy_log[flux_model_Jy_log==-np.inf]=1.0e-33
+                    
+                    #fitting the best av for each model (8640)
+                    result = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy_log),
+                                      bounds=Bounds(AV_min,AV_max))
 
-                #fitting the best av for each model (8640)
-                result = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy_log),
-                                  bounds=Bounds(AV_min,AV_max))
+                    chisq,chisq_nonlimit = self.chisq(flux_model_Jy_log,result.x[0])
 
-                chisq,chisq_nonlimit = self.chisq(flux_model_Jy_log,result.x[0])
+                    FULL_MODEL.append(model_idx+[result.x[0],chisq,chisq_nonlimit])
+                    
+                else:
+                    #fitting the best av for each model (8640)
+                    result = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy),
+                                      bounds=Bounds(AV_min,AV_max))
 
-                FULL_MODEL.append(model_idx+[result.x[0],chisq,chisq_nonlimit])
+                    chisq,chisq_nonlimit = self.chisq(flux_model_Jy,result.x[0])
+
+                    FULL_MODEL.append(model_idx+[result.x[0],chisq,chisq_nonlimit])
+
                             
                 
         elif method == 'grid_search':
@@ -1576,38 +1686,69 @@ class SedFitter(object):
                 fnorm=1.0/(4.0*np.pi)/self.dist**2/pc2cm/pc2cm*Lsun2erg_s
                 modelflux_arr1=sed_flux_model*fnorm # now in erg/s/cm^2. It was in Lsun
                 flux_model_Jy=modelflux_arr1/c_micron_s*self.sed_lambda_model/Jy2erg_s_cm2# now in Jy
-                flux_model_Jy_log=np.log10(flux_model_Jy,dtype=np.float64)
                 
-                #TEMPORARY FIX TO AVOID inf values in chisq
-                flux_model_Jy_log[flux_model_Jy_log==np.inf]=1.0e33
-                flux_model_Jy_log[flux_model_Jy_log==-np.inf]=1.0e-33
+                if treat_errors=='log':
+                    flux_model_Jy_log=np.log10(flux_model_Jy,dtype=np.float64)
 
+                    #TEMPORARY FIX TO AVOID CURVE FIT TO DIE
+                    flux_model_Jy_log[flux_model_Jy_log==np.inf]=1.0e33
+                    flux_model_Jy_log[flux_model_Jy_log==-np.inf]=1.0e-33
                 
-                for av in AV_array:
-                    #extincting the model flux using the av value from AV_array
-                    #and the normalised (in Vband) extc_law
-                    flux_model_Jy_log_extincted = flux_model_Jy_log-0.4*av*norm_extc_law
+                    for av in AV_array:
+                        #extincting the model flux using the av value from AV_array
+                        #and the normalised (in Vband) extc_law
+                        flux_model_Jy_log_extincted = flux_model_Jy_log-0.4*av*norm_extc_law
 
-                    flux_model_Jy_extincted_log_CONV = self.sed_convolution(FILTER_wave_resp,
+                        flux_model_Jy_extincted_log_CONV = self.sed_convolution(FILTER_wave_resp,
+                                                                                self.lambda_array_model,self.sed_lambda_model,
+                                                                                flux_model_Jy_log_extincted)
+
+                        #preliminar consideration of low and up errors
+                        up_err_for_chisq = flux_model_Jy_extincted_log_CONV>=flux_fit_log_arr
+                        percentage_error_up = self.err_flux_array[up_err_for_chisq]/self.flux_array[up_err_for_chisq]
+                        errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
+                        chisq_up = np.sum((flux_model_Jy_extincted_log_CONV[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0\
+                                          /errup_fit_log_arr[up_err_for_chisq]**2.0)
+
+                        lo_err_for_chisq = flux_model_Jy_extincted_log_CONV<flux_fit_log_arr
+                        chisq_lo = np.sum((flux_model_Jy_extincted_log_CONV[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0
+                                          /errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+
+                        chisq = (chisq_up+chisq_lo)/float(nfit)
+
+                        nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30])
+                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+
+
+                        FULL_MODEL.append(model_idx+[av,chisq,chisq_nonlimit])
+                    
+                else:
+                    for av in AV_array:
+                        #extincting the model flux using the av value from AV_array
+                        #and the normalised (in Vband) extc_law
+                        flux_model_Jy_extincted = flux_model_Jy*10**(-0.4*av*norm_extc_law)
+
+                        flux_model_Jy_extincted_CONV = self.sed_convolution(FILTER_wave_resp,
                                                                             self.lambda_array_model,self.sed_lambda_model,
-                                                                            flux_model_Jy_log_extincted)
+                                                                            flux_model_Jy_extincted)
 
-                    #preliminar consideration of low and up errors
-                    up_err_for_chisq = flux_model_Jy_extincted_log_CONV>=flux_fit_log_arr
-                    errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+self.err_flux_array[up_err_for_chisq],dtype=np.float64)
-                    chisq_up = np.sum((flux_model_Jy_extincted_log_CONV[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0/errup_fit_log_arr[up_err_for_chisq]**2.0)
+                        #preliminar consideration of low and up errors
+                        up_err_for_chisq = flux_model_Jy_extincted_CONV>=flux_fit_arr
+                        errup_fit_arr[up_err_for_chisq] = self.err_flux_array[up_err_for_chisq]
+                        chisq_up = np.sum((flux_model_Jy_extincted_CONV[up_err_for_chisq]-flux_fit_arr[up_err_for_chisq])**2.0\
+                                          /errup_fit_arr[up_err_for_chisq]**2.0)
 
-                    lo_err_for_chisq = flux_model_Jy_extincted_log_CONV<flux_fit_log_arr
-                    chisq_lo = np.sum((flux_model_Jy_extincted_log_CONV[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0/errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+                        lo_err_for_chisq = flux_model_Jy_extincted_CONV<flux_fit_arr
+                        chisq_lo = np.sum((flux_model_Jy_extincted_CONV[lo_err_for_chisq]-flux_fit_arr[lo_err_for_chisq])**2.0\
+                                          /errlo_fit_arr[lo_err_for_chisq]**2.0)
 
-                    chisq = (chisq_up+chisq_lo)/float(nfit)
-                    
-                    nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30])
-                    chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+                        chisq = (chisq_up+chisq_lo)/float(nfit)
+
+                        nfit_nonlimit = len(errup_fit_arr[errup_fit_arr<1.0e30])
+                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
 
-                    FULL_MODEL.append(model_idx+[av,chisq,chisq_nonlimit])
-                    
+                        FULL_MODEL.append(model_idx+[av,chisq,chisq_nonlimit])
                     
         elif method == 'idl':
             #load the opacities and interpolate in the range of model wavelength
@@ -1659,54 +1800,94 @@ class SedFitter(object):
                             if all(filt_conv==0.0):
                                 continue
                             else:
-                                filt_conv_idx = filt_conv > 0.0 #create boolean array to take only values >0
-                                lambda_model = self.lambda_array[filt_conv_idx] #use basically the same lambda_Array
-                                flux_fit_log_arr_gt0 = flux_fit_log_arr[filt_conv_idx]
-                                err_flux_array_gt0 = self.err_flux_array[filt_conv_idx]
-                                errup_fit_log_arr_gt0 = errup_fit_log_arr[filt_conv_idx]
-                                errlo_fit_log_arr_gt0 = errlo_fit_log_arr[filt_conv_idx]
-                                fnorm=1./(4.0*np.pi)/dist**2/pc/pc*lsun
-                                modelflux_arr1=filt_conv[filt_conv_idx]*fnorm # now in erg/s/cm^2. it was in lsun
-                                flux_model_Jy=modelflux_arr1/3.0e14*lambda_model*1.0e23 # now in Jy
-                                modelflux_fit_log=np.log10(flux_model_Jy,dtype=np.float64)
+                                if treat_errors=='log':
+                                    filt_conv_idx = filt_conv > 0.0 #create boolean array to take only values >0
+                                    lambda_model = self.lambda_array[filt_conv_idx] #use basically the same lambda_Array
+                                    flux_fit_log_arr_gt0 = flux_fit_log_arr[filt_conv_idx]
+                                    err_flux_array_gt0 = self.err_flux_array[filt_conv_idx]
+                                    errup_fit_log_arr_gt0 = errup_fit_log_arr[filt_conv_idx]
+                                    errlo_fit_log_arr_gt0 = errlo_fit_log_arr[filt_conv_idx]
+                                    fnorm=1./(4.0*np.pi)/dist**2/pc/pc*lsun
+                                    modelflux_arr1=filt_conv[filt_conv_idx]*fnorm # now in erg/s/cm^2. it was in lsun
+                                    flux_model_Jy=modelflux_arr1/3.0e14*lambda_model*1.0e23 # now in Jy
 
-                                interp_kkap = np.interp(lambda_model, klam, kkap)#in the whole vector
-                                interp_kV = np.interp(0.55, klam, kkap)#in the visible
 
-                                for av in av_arr:
-                                    log_flux_model_Jy_extincted = modelflux_fit_log-0.4*av*interp_kkap/interp_kV
+                                    interp_kkap = np.interp(lambda_model, klam, kkap)#in the whole vector
+                                    interp_kV = np.interp(0.55, klam, kkap)#in the visible
+                                    
+                                    modelflux_fit_log=np.log10(flux_model_Jy,dtype=np.float64)
 
-                                    #preliminar consideration of low and up errors
-                                    up_err_for_chisq = log_flux_model_Jy_extincted>=flux_fit_log_arr_gt0
-                                    #here considers some upper limits not to be upper limit
-                                    errup_fit_log_arr_gt0[up_err_for_chisq] = np.log10(1.0+err_flux_array_gt0[up_err_for_chisq],dtype=np.float64)
-                                    chisq_up = np.sum((log_flux_model_Jy_extincted[up_err_for_chisq]-flux_fit_log_arr_gt0[up_err_for_chisq])**2.0/errup_fit_log_arr_gt0[up_err_for_chisq]**2.0)
+                                    for av in av_arr:
+                                        log_flux_model_Jy_extincted = modelflux_fit_log-0.4*av*interp_kkap/interp_kV
 
-                                    lo_err_for_chisq = log_flux_model_Jy_extincted<flux_fit_log_arr_gt0
-                                    chisq_lo = np.sum((log_flux_model_Jy_extincted[lo_err_for_chisq]-flux_fit_log_arr_gt0[lo_err_for_chisq])**2.0/errlo_fit_log_arr_gt0[lo_err_for_chisq]**2.0)
-
-                                    nfit = len(lambda_model)
-                                    chisq = (chisq_up+chisq_lo)/float(nfit)
+                                        #preliminar consideration of low and up errors
+                                        up_err_for_chisq = log_flux_model_Jy_extincted>=flux_fit_log_arr_gt0
+                                        #here considers some upper limits not to be upper limit
                                         
-                                    nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30])
-                                    chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+                                        percentage_error_up = err_flux_array_gt0[up_err_for_chisq]/flux_fit_log_arr_gt0[up_err_for_chisq]
+                                        errup_fit_log_arr_gt0[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
+                                        chisq_up = np.sum((log_flux_model_Jy_extincted[up_err_for_chisq]-flux_fit_log_arr_gt0[up_err_for_chisq])**2.0\
+                                                          /errup_fit_log_arr_gt0[up_err_for_chisq]**2.0)
 
-                                    FULL_MODEL.append([mc+1,sigma+1,ms+1,mu+1,av,chisq,chisq_nonlimit])
+                                        lo_err_for_chisq = log_flux_model_Jy_extincted<flux_fit_log_arr_gt0
+                                        chisq_lo = np.sum((log_flux_model_Jy_extincted[lo_err_for_chisq]-flux_fit_log_arr_gt0[lo_err_for_chisq])**2.0\
+                                                          /errlo_fit_log_arr_gt0[lo_err_for_chisq]**2.0)
+                                        
+                                        nfit = len(lambda_model)
+                                        chisq = (chisq_up+chisq_lo)/float(nfit)
 
-            
-        else:
-            raise TypeError('method must be either minimize, grid_search or idl')
-            
-            
+                                        nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30])
+                                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+
+                                        FULL_MODEL.append([mc+1,sigma+1,ms+1,mu+1,av,chisq,chisq_nonlimit])
+                                else:
+                                    #NOTE: The name _log_ is kept even though is linear space
+                                    filt_conv_idx = filt_conv > 0.0 #create boolean array to take only values >0
+                                    lambda_model = self.lambda_array[filt_conv_idx] #use basically the same lambda_Array
+                                    flux_fit_arr_gt0 = flux_fit_arr[filt_conv_idx]
+                                    err_flux_array_gt0 = self.err_flux_array[filt_conv_idx]
+                                    errup_fit_arr_gt0 = errup_fit_arr[filt_conv_idx]
+                                    errlo_fit_arr_gt0 = errlo_fit_arr[filt_conv_idx]
+                                    fnorm=1./(4.0*np.pi)/dist**2/pc/pc*lsun
+                                    modelflux_arr1=filt_conv[filt_conv_idx]*fnorm # now in erg/s/cm^2. it was in lsun
+                                    flux_model_Jy=modelflux_arr1/3.0e14*lambda_model*1.0e23 # now in Jy
+
+                                    interp_kkap = np.interp(lambda_model, klam, kkap)#in the whole vector
+                                    interp_kV = np.interp(0.55, klam, kkap)#in the visible
+                                    
+                                    modelflux_fit_log=flux_model_Jy
+
+                                    for av in av_arr:
+                                        flux_model_Jy_extincted = flux_model_Jy*10**(-0.4*av*interp_kkap/interp_kV)
+                                        
+                                        #preliminar consideration of low and up errors
+                                        up_err_for_chisq = flux_model_Jy_extincted>=flux_fit_arr_gt0
+                                        #here considers some upper limits not to be upper limit
+                                        errup_fit_arr_gt0[up_err_for_chisq] = err_flux_array_gt0[up_err_for_chisq]
+                                        chisq_up = np.sum((flux_model_Jy_extincted[up_err_for_chisq]-flux_fit_arr_gt0[up_err_for_chisq])**2.0\
+                                                          /errup_fit_arr_gt0[up_err_for_chisq]**2.0)
+
+                                        lo_err_for_chisq = flux_model_Jy_extincted<flux_fit_arr_gt0
+                                        chisq_lo = np.sum((flux_model_Jy_extincted[lo_err_for_chisq]-flux_fit_arr_gt0[lo_err_for_chisq])**2.0\
+                                                          /errlo_fit_arr_gt0[lo_err_for_chisq]**2.0)
+
+                                        nfit = len(lambda_model)
+                                        chisq = (chisq_up+chisq_lo)/float(nfit)
+
+                                        nfit_nonlimit = len(errup_fit_arr[errup_fit_arr<1.0e30])
+                                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+
+                                        FULL_MODEL.append([mc+1,sigma+1,ms+1,mu+1,av,chisq,chisq_nonlimit])
+
+
         FULL_MODEL = np.array(FULL_MODEL)
         return FitterContainer(FULL_MODEL,master_dir = self.master_dir,
                               extinction_law = self.extc_law,
                               lambda_array = self.lambda_array,flux_array= self.flux_array,
                               err_flux_array = self.err_flux_array,upper_limit_array = self.upper_limit_array,
                               dist = self.dist)
-
     
-              
+
     #TODO: Consider putting utilities in a class
     #UTILITIES
     
@@ -1860,7 +2041,7 @@ class SedFitter(object):
         #For the IDL method we need the convolved fluxes for the new filter in a fits file
         #(this is a translation from the IDL script filtflux.pro)
         #Note that this is not needed for the new method as it convolves on the fly
-        existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
+                existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
         
         if filter_name+'.fits' in existing_FITS_filters:
             print('WARNING! The filter file ' + filter_name + '.fits already exists in the database')
@@ -1929,8 +2110,9 @@ class SedFitter(object):
             print('The filter', filter_name,'has been removed from the database')
         else:
             print('WARNING! The input filter is not in the database')
-
-
+        
+        
+            
     def plot_filter(self,filter_name,figsize=(6,4),legend=False,title=None,figname=None):
         '''
         Plots a filter in the database. To see the available filter use SedFitter().print_default_filters
@@ -2239,7 +2421,7 @@ class SedFitter(object):
             if number_of_models==0:
                 raise ValueError('The considered constraints either in chisq_cut or core_radius_cut produce an empty table. Please consider to relax them.')
             if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut or core_radius_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
+                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
 
             if method is not None:
                 if method == 'liu':
@@ -2378,7 +2560,6 @@ class PentagonPlot(object):
         
     #TODO: find out why when putting self in pentagon_plot it does not work
     def plot(models,figname=None):
-
         
         models_phm = models['mcore','sigma','mstar','theta_view','av']
         models_chisq = models['chisq']
@@ -2555,6 +2736,7 @@ class ModelPlotter(FitterContainer):
         cmap = plt.cm.ScalarMappable(cmap=cmap,
                                      norm=colors.LogNorm(vmin=models['chisq'].min(),
                                                          vmax=models['chisq'].max()))
+        #cmap.set_array([])
 
         plt.figure(figsize=figsize)
         for ind_mod in models:
@@ -2796,14 +2978,14 @@ class ModelPlotter(FitterContainer):
 
         ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
 
-        cbar = fig.colorbar(sct3,label=r'$\chi^2$',shrink=0.36,pad=0.01,orientation='vertical',ax=axs)
-        cbar.minorticks_off()
+        cbar = fig.colorbar(sct,label=r'$\chi^2$',shrink=0.5,pad=0.1)
         cbar.set_ticks(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
                                    np.log10(triple_sigma_ms['chisq'].max()),num=5))
         #trick to consider the adecuate number of decimals in round
         dec = int(np.floor(np.abs(np.log10(triple_sigma_ms['chisq'].min()))))+1 #it has to be an integer
         cbar.set_ticklabels(np.around(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
                                                   np.log10(triple_sigma_ms['chisq'].max()),num=5),decimals=dec))
+        
         if title is not None:
             fig.suptitle(title,y=0.8)
             
@@ -2862,8 +3044,7 @@ class ModelPlotter(FitterContainer):
                         np.max(models['chisq'])])
         cbar.set_ticklabels([np.around(np.min(models['chisq']),
                                        decimals=1),5, 10,50,np.around(np.max(models['chisq']),decimals=1)])
-
-
+        
         #plot the best 5 models
         sct = ax.scatter(np.log10(models['mcore'])[0:5],
                          np.log10(models['mstar'])[0:5],
