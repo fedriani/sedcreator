@@ -2668,7 +2668,7 @@ class ModelPlotter(FitterContainer):
         source_nu_Fnu = c_micron_s/self.lambda_array*self.flux_array*Jy2erg_s_cm2 #erg s-1 cm-2
         #next two lines is to avoid lower limits with large errors
         #to go out of the figure define a false 0.5 error for those marked as upper limit
-        error_flux_for_SED_plot = self.err_flux_array
+        error_flux_for_SED_plot = self.err_flux_array/self.flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
         plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,markersize=markersize,
                      uplims=self.upper_limit_array)
@@ -2755,7 +2755,7 @@ class ModelPlotter(FitterContainer):
         source_nu_Fnu = c_micron_s/self.lambda_array*self.flux_array*Jy2erg_s_cm2 #erg s-1 cm-2
         #next two lines is to avoid lower limits with large errors
         #to go out of the figure define a false 0.5 error for those marked as upper limit
-        error_flux_for_SED_plot = self.err_flux_array
+        error_flux_for_SED_plot = self.err_flux_array/self.flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
         plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,markersize=markersize,
                      uplims=self.upper_limit_array)
@@ -2978,7 +2978,7 @@ class ModelPlotter(FitterContainer):
 
         ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
 
-        cbar = fig.colorbar(sct,label=r'$\chi^2$',shrink=0.5,pad=0.1)
+        cbar = fig.colorbar(sct3,label=r'$\chi^2$',shrink=0.36,pad=0.01,orientation='vertical',ax=axs)
         cbar.set_ticks(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
                                    np.log10(triple_sigma_ms['chisq'].max()),num=5))
         #trick to consider the adecuate number of decimals in round
