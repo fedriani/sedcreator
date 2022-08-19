@@ -2979,6 +2979,7 @@ class ModelPlotter(FitterContainer):
         ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
 
         cbar = fig.colorbar(sct3,label=r'$\chi^2$',shrink=0.36,pad=0.01,orientation='vertical',ax=axs)
+        cbar.minorticks_off()
         cbar.set_ticks(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
                                    np.log10(triple_sigma_ms['chisq'].max()),num=5))
         #trick to consider the adecuate number of decimals in round
