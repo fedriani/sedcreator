@@ -28,8 +28,8 @@ from astropy.visualization import simple_norm
 from astropy.stats import sigma_clipped_stats
 from astropy.constants import c, m_e, m_n, m_p
 
-from photutils import aperture_photometry
-from photutils import CircularAperture, CircularAnnulus
+from photutils.aperture import aperture_photometry
+from photutils.aperture import CircularAperture, CircularAnnulus
 
 #constants for SedFitter
 pc2cm = u.pc.to(u.cm)
@@ -253,9 +253,8 @@ class FluxerContainer():
         else:
             plt.xlabel('RA (J2000)')
             plt.ylabel('Dec (J2000)')
-        
+               
         if colorbar:
-            cbar_ticks = np.logspace(np.log10(norm.vmin),np.log10(norm.vmax),num=5)
             if 'BUNIT' in header:
                 cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
             elif 'FUNITS' in header:
@@ -264,14 +263,18 @@ class FluxerContainer():
                 cbar = plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
             else:
                 cbar = plt.colorbar(label='PixelUnits: check header', pad=0.01)
-            cbar.set_ticks(cbar_ticks)
-            cbar.set_ticklabels(cbar_ticks)
-            cbar.ax.set_yticklabels(["{:.2f}".format(i) for i in cbar_ticks])
+                
+            cbar.minorticks_off()
+            cbar.set_ticks(np.logspace(np.log10(norm.vmin),np.log10(norm.vmax),num=5))
+            #trick to consider the adecuate number of decimals in round
+            dec = int(np.floor(np.abs(np.log10(norm.vmin))))+1 #it has to be an integer
+            cbar.set_ticklabels(np.around(np.logspace(np.log10(norm.vmin),np.log10(norm.vmax),num=5),decimals=dec))
+#             cbar.ax.set_yticklabels(["{:.2f}".format(i) for i in cbar_ticks])
             
         if title is not None:
             plt.title(title)
             
-        if plot_mask:
+        if plot_mask and mask is not None:
             mask_to_plot = np.array(mask,dtype=int)
             mask_cmap = plt.cm.Reds_r
             mask_cmap.set_bad(color='white',alpha=0)
@@ -379,6 +382,8 @@ class SedFluxer:
         annulus_aperture = CircularAnnulus([[x_source,y_source]],
                                            r_in=inner_annu_pixel, r_out=outer_annu_pixel)
 
+        aperture_area = aperture.area #main area for corrective factor in fluctuation estimation when masked
+        
         #here is the main code for the aperture photometry
         #--> START of the aperture photometry block
         annulus_masks = annulus_aperture.to_mask(method='center')
@@ -411,9 +416,21 @@ class SedFluxer:
                                 y_source+3.0/2.0*aper_rad_pixel*np.cos(alpha_aper)))
 
             bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel/2.0)
-            aper_set1 = aperture_photometry(data, bkg_aper)['aperture_sum'][0:4].sum()
-            aper_set2 = aperture_photometry(data, bkg_aper)['aperture_sum'][4:8].sum()
-            aper_set3 = aperture_photometry(data, bkg_aper)['aperture_sum'][8:12].sum()
+            bkg_aper_areas = bkg_aper.area_overlap(data=data,mask=mask)
+            
+            bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
+            
+            #getting correcting factor when part of the fluctuation areas are masked
+            #here we assumed that area=nan is 0 and that the flux obtained in the masked
+            #areas is directly proportional to the total flux
+            area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
+            area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
+            area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
+            
+            aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
+            aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
+            aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
+            
             std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
             STD.append(std)
         STD_mean = np.mean(STD)
@@ -655,6 +672,8 @@ class SedFluxer:
         annulus_aperture = CircularAnnulus([[x_source,y_source]],
                                            r_in=inner_annu_pixel, r_out=outer_annu_pixel)
 
+        aperture_area = aperture.area #main area for corrective factor in fluctuation estimation when masked
+        
         #here is the main code for the aperture photometry
         #--> START of the aperture photometry block
         annulus_masks = annulus_aperture.to_mask(method='center')
@@ -672,7 +691,7 @@ class SedFluxer:
         ap_phot['aper_bkg'] = bkg_median * aperture.area #consider a median value for the background subtraction
         ap_phot['aper_sum_bkgsub'] = ap_phot['aperture_sum'] - ap_phot['aper_bkg'] #subtracting the background
         #--> END of the aperture photometry block
-        
+
         #Estimating the error via background fluctuations in the annular background
         #with patches with equal area to that of the aperture.
         angles = np.arange(0.0,360.0,30.0)
@@ -687,9 +706,21 @@ class SedFluxer:
                                 y_source+3.0/2.0*aper_rad_pixel*np.cos(alpha_aper)))
 
             bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel/2.0)
-            aper_set1 = aperture_photometry(data, bkg_aper)['aperture_sum'][0:4].sum()
-            aper_set2 = aperture_photometry(data, bkg_aper)['aperture_sum'][4:8].sum()
-            aper_set3 = aperture_photometry(data, bkg_aper)['aperture_sum'][8:12].sum()
+            bkg_aper_areas = bkg_aper.area_overlap(data=data,mask=mask)
+            
+            bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
+            
+            #getting correcting factor when part of the fluctuation areas are masked
+            #here we assumed that area=nan is 0 and that the flux obtained in the masked
+            #areas is directly proportional to the total flux
+            area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
+            area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
+            area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
+            
+            aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
+            aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
+            aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
+            
             std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
             STD.append(std)
         STD_mean = np.mean(STD)
