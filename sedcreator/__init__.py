@@ -28,8 +28,8 @@ from astropy.visualization import simple_norm
 from astropy.stats import sigma_clipped_stats
 from astropy.constants import c, m_e, m_n, m_p
 
-from photutils.aperture import aperture_photometry
-from photutils.aperture import CircularAperture, CircularAnnulus
+from photutils import aperture_photometry
+from photutils import CircularAperture, CircularAnnulus
 
 #constants for SedFitter
 pc2cm = u.pc.to(u.cm)
