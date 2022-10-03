@@ -60,8 +60,9 @@ User Documentation
     :maxdepth: 1
 
     SedFluxer.rst
-    SedFitter.rst
     optimal_aperture.rst
+    SedFitter.rst
+    filters.rst
     average_model.rst
     sedcreator.rst
 
