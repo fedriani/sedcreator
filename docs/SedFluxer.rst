@@ -29,11 +29,11 @@ and outer annulus radius given in arcsec::
     >>> #or
     >>> flux = fluxer.get_raw_flux(central_coords,aper_rad,inner_annu,outer_annu)
 
-With this flux object, one can retrieve the values for the background subtracted flux and the total flux.
+With this flux object, one can retrieve the values for the background subtracted flux and the total flux, as well as the estimation for the fluctuation error and background.
 One can also print useful information from the header and parameters used and plot the image used together
 with the aperture and annulus defined::
 
-    >>> flux_bkg_sub,flux = flux.get_value()
+    >>> flux_bkg_sub,flux,flu,bkg = flux.get_value()
     >>> flux.plot()
     >>> flux.info
 
@@ -55,7 +55,7 @@ Below is given a short example::
     >>> AFGL2591_fluxer = SedFluxer(hdu)
 
     >>> aperture_radius = 25.0#arcsec
-    >>> AFGL2591_H70_gt = AFGL2591_fluxer.get_flux(central_coords=GC,
+    >>> AFGL2591_H70_gt = AFGL2591_fluxer.get_flux(central_coords=AFGL2591_coords,
     ...                                  	       aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
     ...                                  	       outer_annu=2.0*aperture_radius)
 
@@ -99,17 +99,18 @@ And printing the info::
     Regarding wavelength:
     You are probably using HERSCHEL or ALMA, look at the first extension of the header
     ############################
-    Flux bkg sub 4920.804203524983 Jy
-    Flux         5060.075065156685 Jy
-    Background   139.27086163170225 Jy
+    Flux bkg sub 4445.462065581253 Jy
+    Flux         4618.421490377294 Jy
+    Error Flux   68.13966691325624 Jy
+    Background   172.95942479604037 Jy
     ############################
 
 And finally retrieve the fluxes (background subtracted, and without background subtraction) for our own calculations
 (and use with the SedFitter class)::
 
-    >>> flux_bkg_sub,flux = AFGL2591_H70_gt.get_value()
-    >>> print(flux_bkg_sub,flux)  # doctest: +FLOAT_CMP
-    4920.804203524983 5060.075065156685
+    >>> flux_bkg_sub,flux, flu, bkg = AFGL2591_H70_gt.get_value()
+    >>> print(flux_bkg_sub,flux,flu,bkg)  # doctest: +FLOAT_CMP
+    4445.462065581253 4618.421490377294 68.13966691325624 172.95942479604037
 
 
 	

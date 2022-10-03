@@ -1,5 +1,5 @@
 **********************
-get_optimal_aperture()
+Optimal Aperture
 **********************
 
 Introduction

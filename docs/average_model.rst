@@ -1,5 +1,5 @@
 **********************
-average_model()
+Average Model
 **********************
 
 Introduction
