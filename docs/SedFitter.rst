@@ -56,7 +56,7 @@ We first need to define the arrays to be input in the ``SedFitter`` class. That 
     ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
     >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
     ... 2.8472,26.6452,71.8338,86.5590,
-    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
+    ... 114.4470,141.3799,80.8373,42.1264,17.0529]) #percent
     >>> upp_limit = np.array([1,1,1,1,
     ... 1,0,0,0,
     ... 0,0,0,0,0],dtype=bool)
@@ -82,30 +82,30 @@ Once the fit is done, we can retrieve the best models ordered by chisq using the
     ... tablename=None)
     >>> print(source_models_3p)
 
-     SED_number   chisq    chisq_nonlim mcore ...   lbol   lbol_iso lbol_av  t_now  
-    ----------- ---------- ------------ ----- ... -------- -------- ------- --------
-    10_01_07_12     1.0734      1.55047 160.0 ...  33070.0  15218.5 15218.5 351681.0
-    10_01_08_19    1.98664      2.86959 160.0 ...  78272.7  18702.0 15570.6 445867.0
-    11_01_07_10    2.09091      3.02021 200.0 ...  34235.3  19413.9 18612.9 329404.0
-    11_01_06_05    2.12947      3.46039 200.0 ...  19867.8  14905.2 14905.2 282819.0
-    04_04_06_05    2.16712      3.52156  40.0 ...  49108.3  31242.6 17867.0  33382.6
-    12_01_06_04    2.23936      2.64651 240.0 ...  20164.6  16053.3 16053.3 270376.0
-    05_04_05_03     2.3662      3.07606  50.0 ...  16605.8  16419.7 15170.6  24991.8
-    05_03_06_05    2.76284      3.99077  50.0 ...  46086.1  24153.8 17875.8  73957.4
-    07_02_06_04    2.82566      3.33941  80.0 ...  33793.1  21093.9 17340.2 155958.0
-    07_03_08_10    2.97906      4.30308  80.0 ... 119307.0  15346.0 15346.0  96353.8
-            ...        ...          ...   ... ...      ...      ...     ...      ...
-    11_02_02_01  943.50503   1533.19568 200.0 ...  522.287   654.49  654.49  33909.6
-    08_01_01_01 1005.12119   1633.32193 100.0 ...  91.4825  136.731 136.731  67546.6
-    06_02_01_01 1013.60566   1647.10919  60.0 ...  183.603  302.278 302.278  32471.2
-    01_01_03_01 1020.75287   1658.72341  10.0 ...  127.848  386.266 386.266 265950.0
-    07_02_01_01 1029.43729    1672.8356  80.0 ...  256.351  366.457 366.457  30140.7
-    05_03_01_01  1070.3813   1739.36962  50.0 ...  397.096  626.247 626.247  14314.1
-    09_01_01_01 1082.49042   1759.04693 120.0 ...  88.0842  119.239 119.239  64535.4
-    11_01_01_01 1090.83179   1772.60166 200.0 ...  131.924  154.212 154.212  56715.7
-    10_01_01_01 1132.13915   1839.72613 160.0 ...   98.071  121.715 121.715  59976.8
-    08_02_01_01 1189.68553   1933.23899 100.0 ...  242.939  314.297 314.297  28469.4
-    06_03_01_01 1211.29374   1968.35232  60.0 ...   398.87  569.117 569.117  13683.8
+     SED_number   chisq   chisq_nonlim mcore ...   lbol   lbol_iso lbol_av  t_now  
+    ----------- --------- ------------ ----- ... -------- -------- ------- --------
+    10_01_07_13   1.03751      1.49863 160.0 ...  33070.0  14990.9 14990.9 351681.0
+    03_04_06_08   1.33344      2.16684  30.0 ...  49398.0  14558.3 14558.3  37037.1
+    05_04_08_12   1.78488      2.32034  50.0 ... 189194.0  20215.2 13956.7  46624.5
+    10_01_08_19   1.87692       2.7111 160.0 ...  78272.7  18702.0 15111.3 445867.0
+    11_01_06_05   1.92099      2.27027 200.0 ...  19867.8  14905.2 14905.2 282819.0
+    04_03_06_07   1.96639      3.19538  40.0 ...  45437.1  13668.2 13668.2  79533.3
+    05_04_05_03   2.14913      2.79387  50.0 ...  16605.8  16419.7 14829.3  24991.8
+    07_03_08_10   2.34448      3.38647  80.0 ... 119307.0  15346.0 15346.0  96353.8
+    12_01_06_05   2.43187      3.95178 240.0 ...  20164.6  15573.8 15573.8 270376.0
+    10_01_06_06   2.65884      3.84054 160.0 ...  18682.5  12345.3 12345.3 300765.0
+            ...       ...          ...   ... ...      ...      ...     ...      ...
+    12_04_09_19   94.6027    153.72938 240.0 ... 499180.0 172532.0 18282.2  34554.7
+    13_04_07_20 100.75891    163.73323 320.0 ... 105890.0  86892.2 15410.4  21618.7
+    12_04_08_20  107.7167    175.03964 240.0 ... 305090.0 165763.0 18974.2  28988.0
+    15_03_11_20 117.10834    190.30105 480.0 ... 840671.0 224767.0 21481.3  96234.4
+    14_04_07_20 130.87295    212.66855 400.0 ... 100019.0  86709.4 16847.4  20419.5
+    15_03_08_20 134.14571    217.98678 480.0 ... 209275.0 158881.0 21273.7  57128.0
+    15_03_10_18 138.66091    225.32398 480.0 ... 542510.0 215944.0 22916.7  81745.5
+    15_03_09_20 139.97722    227.46298 480.0 ... 295187.0 180302.0 22251.5  66146.5
+    13_04_08_20 203.11438    330.06087 320.0 ... 308717.0 208355.0 25327.6  27164.7
+    14_04_08_20 315.53159    512.73883 400.0 ... 300819.0 233829.0 30459.1  25087.5
+    15_04_08_20 417.18007    677.91762 480.0 ... 293984.0 242873.0 33913.8  23942.2
     Length = 432 rows
 
 Now, we can generate very interesting plots to show our data and the best models. To do that we need first to initilise the ``ModelPlotter`` class with the object from the sed_fit::
@@ -115,133 +115,26 @@ Now, we can generate very interesting plots to show our data and the best models
 
 It is very simple then to plot, for example the best 5 SEDs from the 432 physical models::
 
-        >>> md.plot_multiple_seds(source_models_3p[0:5],xlim=[1e0,1e3],ylim=[1e-12,1e-6],title='Best 5 SEDs models',marker='rs',cmap='gray',colorbar=False,figname=None)
+        >>> md.plot_multiple_seds(source_models_3p[0:5],xlim=[1e0,1e3],ylim=[1e-12,1e-6],
+        ... title='Best 5 SEDs models',marker='rs',cmap='gray',colorbar=False,figname=None)
 
+.. image:: _static/best5_SEDs.png
 
-.. plot::
-   :context: close-figs
-   :format: doctest
-   :include-source: False
+Let's also do a more colorful plot by plotting all SED with a chisq<20, considering this time the 8640 models::
 
-    >>> from sedcreator import SedFitter,ModelPlotter
-    >>> import numpy as np
+        >>> md.plot_multiple_seds(source_models_4p[source_models_4p['chisq']<20.0],
+        ... xlim=[1e0,1e3],ylim=[1e-12,1e-6],title=r'SEDs with $\chi^2<20$',marker='ks',cmap='rainbow_r',colorbar=True,
+        ... figname='myfirstSED_plot.pdf') #or .png, .eps, or your favourite format.
 
-    >>> wavelength = np.array([3.6,4.5,5.8,8.0,
-    ... 7.7,19.2,31.5,37.1,
-    ... 70.0,160.0,250.0,350.0,500.0]) #micron
-    >>> flux = np.array([1.8835,2.0301,9.8080,14.3600,
-    ... 28.4727,266.4529,718.3385,865.5905,
-    ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
-    >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
-    ... 2.8472,26.6452,71.8338,86.5590,
-    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
-    >>> upp_limit = np.array([1,1,1,1,
-    ... 1,0,0,0,
-    ... 0,0,0,0,0],dtype=bool)
-    >>> filter_name = np.array(['I1','I2','I3','I4',
-    ... 'F4','F8','L1','L4',
-    ... 'P1','P3','P4','P5','P6'])
-
-    >>> source_sed = SedFitter(extc_law='kmh',lambda_array=wavelength,flux_array=flux,err_flux_array=error_flux,
-    ... upper_limit_array=upp_limit,filter_array=filter_name)
-
-    >>> distance = 2000.0 #pc
-    >>> AV_max = 1000.0 #mag
-
-    >>> source_sed_results = source_sed.sed_fit(dist=distance,AV_max=AV_max,method='minimize')
-
-    >>> source_models_3p = source_sed_results.get_model_info(keys=['mcore','sigma','mstar'],
-    ... tablename=None)
-
-    >>> md = ModelPlotter(source_sed_results)
-
-    >>> md.plot_multiple_seds(source_models_3p[0:5],xlim=[1e0,1e3],ylim=[1e-12,1e-6],title='Best 5 SEDs models',marker='rs',cmap='gray',colorbar=False,figname=None)
-
-Let's also do a more colorful plot by plotting all SED with a chisq<50, considering this time the 8640 models::
-
-        >>> md.plot_multiple_seds(source_models_4p[source_models_4p['chisq']<50.0],xlim=[1e0,1e3],ylim=[1e-12,1e-6],title=r'SEDs with $\chi^2<50$',marker='ks',cmap='rainbow_r',colorbar=True,figname=None)
-
-.. plot::
-   :context: close-figs
-   :format: doctest
-   :include-source: False
-
-    >>> from sedcreator import SedFitter,ModelPlotter
-    >>> import numpy as np
-
-    >>> wavelength = np.array([3.6,4.5,5.8,8.0,
-    ... 7.7,19.2,31.5,37.1,
-    ... 70.0,160.0,250.0,350.0,500.0]) #micron
-    >>> flux = np.array([1.8835,2.0301,9.8080,14.3600,
-    ... 28.4727,266.4529,718.3385,865.5905,
-    ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
-    >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
-    ... 2.8472,26.6452,71.8338,86.5590,
-    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
-    >>> upp_limit = np.array([1,1,1,1,
-    ... 1,0,0,0,
-    ... 0,0,0,0,0],dtype=bool)
-    >>> filter_name = np.array(['I1','I2','I3','I4',
-    ... 'F4','F8','L1','L4',
-    ... 'P1','P3','P4','P5','P6'])
-
-    >>> source_sed = SedFitter(extc_law='kmh',lambda_array=wavelength,flux_array=flux,err_flux_array=error_flux,
-    ... upper_limit_array=upp_limit,filter_array=filter_name)
-
-    >>> distance = 2000.0 #pc
-    >>> AV_max = 1000.0 #mag
-
-    >>> source_sed_results = source_sed.sed_fit(dist=distance,AV_max=AV_max,method='minimize')
-
-    >>> md = ModelPlotter(source_sed_results)
-
-    >>> source_models_4p = source_sed_results.get_model_info(keys=['mcore','sigma','mstar','theta_view'],
-    ... tablename=None)
-
-        >>> md.plot_multiple_seds(source_models_4p[source_models_4p['chisq']<50.0],xlim=[1e0,1e3],ylim=[1e-12,1e-6],title=r'SEDs with $\chi^2<50$',marker='ks',cmap='rainbow_r',colorbar=True,figname=None)
+.. image:: _static/chisq50_SEDs.png
 
 It is also interesting to plot the 2D distribution of the 3 main parameters of the model, i.e., m*, sigma_cl, and M_c::
 
-    >>> md.plot2d(source_models_4p[source_models_4p['chisq']<=50.0],title=None,figname=None)
+    >>> md.plot2d(source_models_4p[source_models_4p['chisq']<=20.0],
+        ... title='2D space for physical parameter with $\chi^2<20$',
+        ... figname=None)
 
-.. plot::
-   :context: close-figs
-   :format: doctest
-   :include-source: False
-
-    >>> from sedcreator import SedFitter,ModelPlotter
-    >>> import numpy as np
-
-    >>> wavelength = np.array([3.6,4.5,5.8,8.0,
-    ... 7.7,19.2,31.5,37.1,
-    ... 70.0,160.0,250.0,350.0,500.0]) #micron
-    >>> flux = np.array([1.8835,2.0301,9.8080,14.3600,
-    ... 28.4727,266.4529,718.3385,865.5905,
-    ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
-    >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
-    ... 2.8472,26.6452,71.8338,86.5590,
-    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
-    >>> upp_limit = np.array([1,1,1,1,
-    ... 1,0,0,0,
-    ... 0,0,0,0,0],dtype=bool)
-    >>> filter_name = np.array(['I1','I2','I3','I4',
-    ... 'F4','F8','L1','L4',
-    ... 'P1','P3','P4','P5','P6'])
-
-    >>> source_sed = SedFitter(extc_law='kmh',lambda_array=wavelength,flux_array=flux,err_flux_array=error_flux,
-    ... upper_limit_array=upp_limit,filter_array=filter_name)
-
-    >>> distance = 2000.0 #pc
-    >>> AV_max = 1000.0 #mag
-
-    >>> source_sed_results = source_sed.sed_fit(dist=distance,AV_max=AV_max,method='minimize')
-
-    >>> source_models_4p = source_sed_results.get_model_info(keys=['mcore','sigma','mstar','theta_view'],
-    ... tablename=None)
-
-    >>> md = ModelPlotter(source_sed_results)
-
-    >>> md.plot2d(source_models_4p[source_models_4p['chisq']<=50.0],title=None,figname=None)
+.. image:: _static/2D_plot.png
 
 To check the name of the filter::
 

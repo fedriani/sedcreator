@@ -63,29 +63,7 @@ The plot should look like::
 
     >>> AFGL2591_H70_gt.plot(cmap='rainbow')
 
-.. plot::
-   :context: close-figs
-   :format: doctest
-   :include-source: False
-
-    >>> from sedcreator import SedFluxer
-    >>> from astropy.io import fits as pyfits
-    >>> from astropy.coordinates import SkyCoord
-    >>> import astropy.units as u
-
-    >>> filename = '../examples/AFGL2591_data/AFGL2591_Herschel_70.fits'
-
-    >>> hdu = pyfits.open(filename)[1]
-
-    >>> AFGL2591_coords = SkyCoord(ra='20h29m24.8916s', dec='+40d11m19.388s', frame='fk5')
-    >>> AFGL2591_fluxer = SedFluxer(hdu)
-
-    >>> aperture_radius = 25.0#arcsec
-    >>> AFGL2591_H70_gt = AFGL2591_fluxer.get_flux(central_coords=AFGL2591_coords,
-    ...                                  	       aper_rad=aperture_radius,inner_annu=1.0*aperture_radius,
-    ...                                  	       outer_annu=2.0*aperture_radius)
-
-    >>> AFGL2591_H70_gt.plot(cmap='rainbow')
+.. image:: _static/AFGL2591_opt_aper_fluxer.png
 
 And printing the info::
 
