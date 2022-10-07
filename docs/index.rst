@@ -61,6 +61,7 @@ User Documentation
 
     SedFluxer.rst
     optimal_aperture.rst
+    error_estimation.rst
     SedFitter.rst
     filters.rst
     average_model.rst
