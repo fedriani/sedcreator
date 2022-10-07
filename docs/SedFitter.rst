@@ -32,11 +32,11 @@ Below one can find an example:
 
 We first need to define the arrays to be input in the ``SedFitter`` class. That is 
 
-* wavelength array in micrometers
+* source_wave, wavelength array in micrometers
 
-* flux array in Jy
+* source_flux, flux array in Jy
 
-* error_flux array in percentage with respect to flux
+* source_flux_err, error in the flux array in Jy
 
 * upp_limit as a boolean array, 1 (or True) for upper limit and 0 (or False) for non upper limit.
 
@@ -54,9 +54,9 @@ We first need to define the arrays to be input in the ``SedFitter`` class. That 
     >>> flux = np.array([1.8835,2.0301,9.8080,14.3600,
     ... 28.4727,266.4529,718.3385,865.5905,
     ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
-    >>> error_flux = np.array([0.1,0.1,0.1,0.1052,
-    ... 0.1,0.1,0.1,0.1,
-    ... 0.1,0.2117,0.3970,0.6091,0.9186]) #percent
+    >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
+    ... 2.8472,26.6452,71.8338,86.5590,
+    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
     >>> upp_limit = np.array([1,1,1,1,
     ... 1,0,0,0,
     ... 0,0,0,0,0],dtype=bool)
@@ -132,9 +132,9 @@ It is very simple then to plot, for example the best 5 SEDs from the 432 physica
     >>> flux = np.array([1.8835,2.0301,9.8080,14.3600,
     ... 28.4727,266.4529,718.3385,865.5905,
     ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
-    >>> error_flux = np.array([0.1,0.1,0.1,0.1052,
-    ... 0.1,0.1,0.1,0.1,
-    ... 0.1,0.2117,0.3970,0.6091,0.9186]) #percent
+    >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
+    ... 2.8472,26.6452,71.8338,86.5590,
+    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
     >>> upp_limit = np.array([1,1,1,1,
     ... 1,0,0,0,
     ... 0,0,0,0,0],dtype=bool)
@@ -175,9 +175,9 @@ Let's also do a more colorful plot by plotting all SED with a chisq<50, consider
     >>> flux = np.array([1.8835,2.0301,9.8080,14.3600,
     ... 28.4727,266.4529,718.3385,865.5905,
     ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
-    >>> error_flux = np.array([0.1,0.1,0.1,0.1052,
-    ... 0.1,0.1,0.1,0.1,
-    ... 0.1,0.2117,0.3970,0.6091,0.9186]) #percent
+    >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
+    ... 2.8472,26.6452,71.8338,86.5590,
+    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
     >>> upp_limit = np.array([1,1,1,1,
     ... 1,0,0,0,
     ... 0,0,0,0,0],dtype=bool)
@@ -218,9 +218,9 @@ It is also interesting to plot the 2D distribution of the 3 main parameters of t
     >>> flux = np.array([1.8835,2.0301,9.8080,14.3600,
     ... 28.4727,266.4529,718.3385,865.5905,
     ... 1126.7534,603.8391,197.4299,68.2472,18.4542]) #Jy
-    >>> error_flux = np.array([0.1,0.1,0.1,0.1052,
-    ... 0.1,0.1,0.1,0.1,
-    ... 0.1,0.2117,0.3970,0.6091,0.9186]) #percent
+    >>> error_flux = np.array([0.1983,0.2093,1.0533,1.6109,
+    ... 2.8472,26.6452,71.8338,86.5590,
+    ... 114.4470,75.3240,32.6238,14.2984,4.6012]) #percent
     >>> upp_limit = np.array([1,1,1,1,
     ... 1,0,0,0,
     ... 0,0,0,0,0],dtype=bool)
