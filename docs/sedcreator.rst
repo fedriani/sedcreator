@@ -1,6 +1,6 @@
-************
+********************************
 full documentation to sedcreator
-************
+********************************
 
 .. automodule:: sedcreator.__init__
     :members:
