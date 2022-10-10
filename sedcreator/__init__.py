@@ -2019,7 +2019,7 @@ class SedFitter(object):
             pyfits.writeto(master_dir+'Model_SEDs/flux_filt/'+filter_name+'.fits',flux_model_conv)
 
     
-    def add_SQUARE_filter(self,filter_name,instrument,filter_lambda,filter_width):
+    def add_square_filter(self,filter_name,instrument,filter_lambda,filter_width):
         '''
         Adds square filter to the database given the central filter_lambda and the filter_width.
         It adds a txt file to the database with columns lambda_array and response_array.
@@ -2074,7 +2074,7 @@ class SedFitter(object):
         #For the IDL method we need the convolved fluxes for the new filter in a fits file
         #(this is a translation from the IDL script filtflux.pro)
         #Note that this is not needed for the new method as it convolves on the fly
-                existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
+        existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
         
         if filter_name+'.fits' in existing_FITS_filters:
             print('WARNING! The filter file ' + filter_name + '.fits already exists in the database')
