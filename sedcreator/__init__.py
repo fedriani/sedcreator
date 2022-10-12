@@ -1227,7 +1227,10 @@ class SedFitter(object):
                     
             filter_idx = []
             for filter_value in filter_array:
-                filter_idx.append(np.where(filter_name==filter_value)[0][0])
+                try:
+                    filter_idx.append(np.where(filter_name==filter_value)[0][0])
+                except:
+                    raise ValueError("The filter", filter_value, "is not in dabatase, please add it")
 
             lambda_array_filters = filter_wavelength[filter_idx] #this is use for the convolution
             filter_array_model = filter_name[filter_idx]
