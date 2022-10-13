@@ -131,7 +131,7 @@ class FluxerContainer():
         elif 'MIDOBS' in header: #work around to print date in WISE data
             print('Observing date:',header['MIDOBS'])
         else:
-            print('Regarding observing time:\nYou are probably using HERSCHEL, look at the first extension of the header')
+            print('Observing date:\nNo information found in this header')
         #to print the wavelength
         if 'WAVELEN' in header:
             print('Wavelength:',header['WAVELEN'])
@@ -153,7 +153,7 @@ class FluxerContainer():
             if header['CHNLNUM']==4:
                 print('Wavelength:',8.0)
         else:
-            print('Regarding wavelength:\nYou are probably using HERSCHEL or ALMA, look at the first extension of the header')
+            print('Wavelength:\nNo information found in this header')
 
         if flux_method=='get_flux':
             print('############################')
