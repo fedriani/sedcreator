@@ -1551,7 +1551,7 @@ class SedFitter(object):
 
         return(chisq)
     
-    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',treat_errors='log',avopt=0):
+    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',progress=True,treat_errors='linear',avopt=0):
         #TODO: write proper function description.
         '''
         Fits the SED observations to the Z&T18 set of models
@@ -1577,7 +1577,10 @@ class SedFitter(object):
             and calculates the chi square as define in Z&T18 (See also De Buizer et al. 2017).
             'idl' is a translation of the IDL version that also performs a grid search,
             it keeps the compatibility with the previous version using the same constants and fits files.
-                        
+
+        progress: bool
+            progress bar either True or False.
+
         avopt: int
             This is only relevant when choosing method = 'idl'. It sets the visual extunction option.
             0 is equally distributed AV point in the range of (0,AV_max)
@@ -1679,7 +1682,7 @@ class SedFitter(object):
         nfit = len(self.upper_limit_array) #total number of points
 
         if method == 'minimize':
-            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA)):
+            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA),disable= not progress):
                 sed_model = np.loadtxt(master_dir+'/Model_SEDs/sed/'+model_data,unpack=True)
                 self.sed_lambda_model = sed_model[0] #micron
                 sed_flux_model = sed_model[1]
@@ -1715,7 +1718,7 @@ class SedFitter(object):
                             
                 
         elif method == 'grid_search':
-            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA)):
+            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA),disable= not progress):
                 sed_model = np.loadtxt(master_dir+'/Model_SEDs/sed/'+model_data,unpack=True)
                 self.sed_lambda_model = sed_model[0] #micron
                 sed_flux_model = sed_model[1]
@@ -1816,7 +1819,7 @@ class SedFitter(object):
             mH=1.6733e-24
             clight=2.9979e14
 
-            for mc in tqdm(range(nmc)):
+            for mc in tqdm(range(nmc),disable= not progress):
                 for sigma in range(nsigma):
                     if avopt:
                         av_clump = sigma/1.6733e-24/1.8e21/2.0
