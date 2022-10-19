@@ -1448,8 +1448,8 @@ class SedFitter(object):
             errlo_fit_lin_arr=linear_err# this is absolute error in linear space
             
             nfit = len(self.upper_limit_array) #total number of points
-            errup_fit_lin_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-            errlo_fit_lin_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set upper limit errors to flux value
+            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set lower limit errors to flux value
 
             #these two lines are to avoid singularities in the case of error=0
             errup_fit_lin_arr[errup_fit_lin_arr==0.0]=1.0e-33
@@ -1526,8 +1526,8 @@ class SedFitter(object):
             errlo_fit_lin_arr=linear_err# this is absolute error in linear space
             
             nfit = len(self.upper_limit_array) #total number of points
-            errup_fit_lin_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-            errlo_fit_lin_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set upper limit errors to flux value
+            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set lower limit errors to flux value
 
             #these two lines are to avoid singularities in the case of error=0
             errup_fit_lin_arr[errup_fit_lin_arr==0.0]=1.0e-33
@@ -1675,8 +1675,8 @@ class SedFitter(object):
             #these two lines are to avoid singularities in the case of error=0
             errup_fit_lin_arr[errup_fit_lin_arr==0.0]=1.0e-33
             errlo_fit_lin_arr[errlo_fit_lin_arr==0.0]=1.0e-33
-            errup_fit_lin_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-            errlo_fit_lin_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set upper limit errors to flux value
+            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set lower limit errors to flux value
 
 
         nfit = len(self.upper_limit_array) #total number of points
