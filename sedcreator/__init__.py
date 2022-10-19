@@ -2145,7 +2145,7 @@ class SedFitter(object):
             filters_table.remove_row(np.argwhere(filters_table['filter']==filter_name)[0][0])
             os.remove(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt')
             os.remove(master_dir+'/Model_SEDs/flux_filt/'+filter_name+'.fits')
-            ascii.write(filters_table,'/opt/anaconda3/lib/python3.7/site-packages/sedcreator/Model_SEDs/parfiles/filter_default.dat', overwrite=True)
+            ascii.write(filters_table,master_dir+'/Model_SEDs/parfiles/filter_default.dat', overwrite=True)
             print('The filter', filter_name,'has been removed from the database')
         else:
             print('WARNING! The input filter is not in the database')
