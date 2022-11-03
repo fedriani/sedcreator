@@ -37,18 +37,22 @@ Lsun2erg_s = u.L_sun.to(u.erg*u.s**-1)
 c_micron_s = c.to(u.micron*u.s**-1).value
 Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 
+#to track the version
+__version__ = '0.9.1'
+
 class FluxerContainer():
     '''
     A class to store the results from the SedFluxer class
     '''
-    def __init__(self,data=None,flux_bkgsub=None,flux=None,error_flux=None,
+    def __init__(self,data=None,flux_bkgsub=None,flux=None,fluc_error=None,bkg=None,
                  central_coords=None,aper_rad=None,inner_annu=None,outer_annu=None,
                  x_source=None,y_source=None,aper_rad_pixel=None,wcs_header= None,
                  aperture=None,annulus_aperture=None,mask=None,flux_method=None):
         self.data = data
         self.flux_bkgsub = flux_bkgsub
         self.flux = flux
-        self.error_flux = error_flux
+        self.fluc_error = fluc_error
+        self.bkg = bkg
         self.central_coords = central_coords
         self.aper_rad = aper_rad
         self.inner_annu = inner_annu
@@ -78,11 +82,11 @@ class FluxerContainer():
         
         Returns
         -------
-        flux_bkgsub,flux,error_flux,background: numpy array
+        flux_bkgsub,flux,fluc_error,background: numpy array
         
         '''
         
-        return(self.flux_bkgsub,self.flux,self.error_flux,self.flux-self.flux_bkgsub)
+        return self.flux_bkgsub,self.flux,self.fluc_error,self.bkg
     
     @property
     def info(self):
@@ -159,7 +163,7 @@ class FluxerContainer():
             print('############################')
             print('Flux bkg sub',self.flux_bkgsub, 'Jy')
             print('Flux        ',self.flux, 'Jy')
-            print('Error Flux  ',self.error_flux, 'Jy')
+            print('Fluc error  ',self.fluc_error, 'Jy')
             print('Background  ',self.flux-self.flux_bkgsub, 'Jy')
             print('############################')
 
@@ -167,7 +171,7 @@ class FluxerContainer():
             print('############################')
             print('Flux bkg sub',self.flux_bkgsub, 'unitless')
             print('Flux        ',self.flux, 'unitless')
-            print('Error Flux  ',self.error_flux, 'unitless')
+            print('Fluc error  ',self.fluc_error, 'unitless')
             print('Background  ',self.flux-self.flux_bkgsub, 'unitless')
             print('############################')
             print('Please, perform your own units transformation')
@@ -317,7 +321,7 @@ class SedFluxer:
             #this is to deal with ALMA and VLA data that has 4 dimensions in shape
             if len(np.shape(self.image[0][0].data))==4:
                 data = self.image[0][0].data[0][0]
-        return(data,header)
+        return data,header
         
         
     def get_flux(self,central_coords,aper_rad,inner_annu,outer_annu,mask=None):
@@ -417,23 +421,34 @@ class SedFluxer:
 
             bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel/2.0)
             bkg_aper_areas = bkg_aper.area_overlap(data=data,mask=mask)
+            bkg_aper_total_area = bkg_aper.area
+            ap_total_frac = np.nansum(bkg_aper_areas)/(bkg_aper_total_area*len(bkg_pos))
             
-            bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
-            
-            #getting correcting factor when part of the fluctuation areas are masked
-            #here we assumed that area=nan is 0 and that the flux obtained in the masked
-            #areas is directly proportional to the total flux
-            area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
-            area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
-            area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
-            
-            aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
-            aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
-            aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
-            
-            std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
-            STD.append(std)
-        STD_mean = np.mean(STD)
+            if ap_total_frac < 0.5:
+                break
+                
+            else:
+                bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
+
+                #getting correcting factor when part of the fluctuation areas are masked
+                #here we assumed that area=nan is 0 and that the flux obtained in the masked
+                #areas is directly proportional to the total flux
+                area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
+                area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
+                area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
+
+                aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
+                aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
+                aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
+
+                std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
+                STD.append(std)
+       
+        if ap_total_frac < 0.5:
+            fluc_error = ap_phot['aper_bkg'].data[0]
+        else:
+            fluc_error = np.mean(STD)
+
         
         #This block is to deal with WISE DN units
         #The first if else is to deal with both WISE images the one downloaded from Skyview and from WISE archive
@@ -459,13 +474,15 @@ class SedFluxer:
                 #magnitude transformation for WISE depending on the above constants (band dependent)
                 Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
                 Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
-                Mcal_error = M_0_inst-2.5*np.log10(STD_mean)-AC
+                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
+                Mcal_error = M_0_inst-2.5*np.log10(fluc_error)-AC
 
                 #flux conversion for WISE
                 flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
                 #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
                 flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
-                error_flux = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
+                bkg = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
+                fluc_error = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
 
             elif 'SOFIA 2.5m' in header['TELESCOP']:#To get around HAWC+ data
                 #TODO: careful here, I am not sure it will work 100%.
@@ -478,11 +495,13 @@ class SedFluxer:
                             unit_factor_Jy = 1.0 #leave it in Jy
                         flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
                         flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                        error_flux = unit_factor_Jy*STD_mean #Jy
+                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0] #Jy
+                        fluc_error = unit_factor_Jy*fluc_error #Jy
                     elif 'Jy'==header['BUNIT']:
                         flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
                         flux = ap_phot['aperture_sum'].data[0] #Jy
-                        error_flux = STD_mean #Jy
+                        bkg = ap_phot['aper_bkg'].data[0] #Jy
+                        fluc_error = fluc_error #Jy
                     else:
                         raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
                 elif 'FUNITS' in header:
@@ -493,7 +512,8 @@ class SedFluxer:
                             unit_factor_Jy = 1.0 #leave it in Jy
                         flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
                         flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                        error_flux = unit_factor_Jy*STD_mean #Jy
+                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0] #Jy
+                        fluc_error = unit_factor_Jy*fluc_error #Jy
                 else:
                     raise Exception('Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation')
                     
@@ -526,13 +546,15 @@ class SedFluxer:
                 #magnitude transformation for WISE depending on the above constants (band dependent)
                 Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
                 Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
-                Mcal_error = M_0_inst-2.5*np.log10(STD_mean)-AC
+                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
+                Mcal_error = M_0_inst-2.5*np.log10(fluc_error)-AC
 
                 #flux conversion for WISE
                 flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
                 #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
                 flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
-                error_flux = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
+                bkg = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
+                fluc_error = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
                     
             else:
                 raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
@@ -544,11 +566,13 @@ class SedFluxer:
                     if 'CD1_1' in header:
                         flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
                         flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                        error_flux = STD_mean*304.6*(np.absolute(header['CD1_1']))**2 #Jy
+                        bkg = ap_phot['aper_bkg'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
+                        fluc_error = fluc_error*304.6*(np.absolute(header['CD1_1']))**2 #Jy
                     elif 'CDELT1' in header:
                         flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
                         flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                        error_flux = STD_mean*304.6*(np.absolute(header['CDELT1']))**2 #Jy
+                        bkg = ap_phot['aper_bkg'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
+                        fluc_error = fluc_error*304.6*(np.absolute(header['CDELT1']))**2 #Jy
                     else:
                         raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
                 elif 'Jy/beam' in header['BUNIT']:#mainly for ALMA data or some other radio data
@@ -560,11 +584,13 @@ class SedFluxer:
                     if 'CD1_1' in header:
                         flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
                         flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                        error_flux = unit_factor_Jy*STD_mean/(beam/(np.absolute(header['CD1_1']))**2) #Jy
+                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
+                        fluc_error = unit_factor_Jy*fluc_error/(beam/(np.absolute(header['CD1_1']))**2) #Jy
                     elif 'CDELT1' in header:
                         flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
                         flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                        error_flux = unit_factor_Jy*STD_mean/(beam/(np.absolute(header['CDELT1']))**2) #Jy
+                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
+                        fluc_error = unit_factor_Jy*fluc_error/(beam/(np.absolute(header['CDELT1']))**2) #Jy
                     else:
                         raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
                 elif 'Jy/pix' in header['BUNIT']:
@@ -574,11 +600,13 @@ class SedFluxer:
                         unit_factor_Jy = 1.0 #leave it in Jy
                     flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                    error_flux = unit_factor_Jy*STD_mean #Jy
+                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0] #Jy
+                    fluc_error = unit_factor_Jy*fluc_error #Jy
                 elif 'Jy'==header['BUNIT']:
                     flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = ap_phot['aperture_sum'].data[0] #Jy
-                    error_flux = STD_mean #Jy
+                    bkg = ap_phot['aper_bkg'].data[0] #Jy
+                    fluc_error = fluc_error #Jy
                 else:
                     raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
 
@@ -590,11 +618,13 @@ class SedFluxer:
                         unit_factor_Jy = 1.0 #leave it in Jy
                     flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                    error_flux = unit_factor_Jy*STD_mean #Jy
+                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0] #Jy
+                    fluc_error = unit_factor_Jy*fluc_error #Jy
                 elif 'Jy'==header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
                     flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
                     flux = ap_phot['aperture_sum'].data[0] #Jy
-                    error_flux = STD_mean #Jy
+                    bkg = ap_phot['aper_bkg'].data[0] #Jy
+                    fluc_error = fluc_error #Jy
                 elif 'Jy/sq-arc' in header['FUNITS']:#This is mainly for SOFIA data
                     if 'mJy/sq-arc' in header['FUNITS']:
                         unit_factor_Jy = 0.001 #from mJy to Jy
@@ -602,14 +632,15 @@ class SedFluxer:
                         unit_factor_Jy = 1.0 #leave it in Jy
                     flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale**2 #Jy
                     flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]*pixel_scale**2 #Jy
-                    error_flux = unit_factor_Jy*STD_mean*pixel_scale**2 #Jy
+                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]*pixel_scale**2 #Jy
+                    fluc_error = unit_factor_Jy*fluc_error*pixel_scale**2 #Jy
                 else:
                     raise Exception('FUNITS (',header['FUNITS'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
             else:
                 raise Exception('Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation')
                 
 
-        return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,error_flux=error_flux,
+        return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,fluc_error=fluc_error,bkg=bkg,
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
                  aperture=aperture,annulus_aperture=annulus_aperture,mask=mask,flux_method='get_flux')
@@ -707,29 +738,40 @@ class SedFluxer:
 
             bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel/2.0)
             bkg_aper_areas = bkg_aper.area_overlap(data=data,mask=mask)
+            bkg_aper_total_area = bkg_aper.area
+            ap_total_frac = np.nansum(bkg_aper_areas)/(bkg_aper_total_area*len(bkg_pos))
             
-            bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
-            
-            #getting correcting factor when part of the fluctuation areas are masked
-            #here we assumed that area=nan is 0 and that the flux obtained in the masked
-            #areas is directly proportional to the total flux
-            area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
-            area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
-            area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
-            
-            aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
-            aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
-            aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
-            
-            std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
-            STD.append(std)
-        STD_mean = np.mean(STD)
+            if ap_total_frac < 0.5:
+                break
+                
+            else:
+                bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
+
+                #getting correcting factor when part of the fluctuation areas are masked
+                #here we assumed that area=nan is 0 and that the flux obtained in the masked
+                #areas is directly proportional to the total flux
+                area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
+                area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
+                area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
+
+                aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
+                aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
+                aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
+
+                std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
+                STD.append(std)
+       
+        if ap_total_frac < 0.5:
+            fluc_error = ap_phot['aper_bkg'].data[0]
+        else:
+            fluc_error = np.mean(STD)
         
         flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]
         flux = ap_phot['aperture_sum'].data[0]
-        error_flux = STD_mean
+        bkg = ap_phot['aper_bkg'].data[0]
 
-        return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,error_flux=error_flux,
+
+        return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,fluc_error=fluc_error,bkg=bkg,
                  central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
                  x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
                  aperture=aperture,annulus_aperture=annulus_aperture,mask=mask,flux_method='get_raw_flux')
@@ -792,13 +834,13 @@ class SedFluxer:
 
         for radius in APER_RAD:
             try:
-                flux_bkg, flux, error_flux, background = self.get_flux(central_coords=central_coords,
+                flux_bkg, flux, fluc_error, background = self.get_flux(central_coords=central_coords,
                                                                        aper_rad=radius,
                                                                        inner_annu=1.0*radius,
                                                                        outer_annu=2.0*radius).value
                 unit = 1 # to consider Jy in label
             except:
-                flux_bkg, flux, error_flux, background = self.get_raw_flux(central_coords=central_coords,
+                flux_bkg, flux, fluc_error, background = self.get_raw_flux(central_coords=central_coords,
                                                                            aper_rad=radius,
                                                                            inner_annu=1.0*radius,
                                                                            outer_annu=2.0*radius).value
@@ -1008,7 +1050,7 @@ class FitterContainer():
             ascii.write(table_model_unique,tablename)
             print('Table saved in ',tablename)
         
-        return(table_model_unique)
+        return table_model_unique
 
 
     @property
@@ -1050,7 +1092,7 @@ class FitterContainer():
         print('best AV', self.best_AV)
         print('best chisq', self.best_chisq)
         
-        return(self.best_mc_idx,self.best_sigma_idx,self.best_ms_idx,self.best_theta_idx,self.best_AV)
+        return self.best_mc_idx,self.best_sigma_idx,self.best_ms_idx,self.best_theta_idx,self.best_AV
 
 
 class SedFitter(object):
@@ -1112,7 +1154,7 @@ class SedFitter(object):
     
     def get_master_dir(self):
         master_dir = pkg_resources.resource_filename("sedcreator","/")
-        return(master_dir)
+        return master_dir
         
     def get_model_data(self):
         master_dir = self.master_dir
@@ -1123,7 +1165,7 @@ class SedFitter(object):
         for i in ALL_model_dat:
             ALL_model_idx.append([int(i[0:11][0:2]),int(i[0:11][3:5]),
                                   int(i[0:11][6:8]),int(i[0:11][9:11])])
-        return(ALL_model_dat,ALL_model_idx)
+        return ALL_model_dat,ALL_model_idx
     
     def get_sed(self,mcore=10, sigma=0.1, mstar=0.5, theta_view=22.33, av=0,dist=1000, filter_array=None):
         '''
@@ -1227,10 +1269,7 @@ class SedFitter(object):
                     
             filter_idx = []
             for filter_value in filter_array:
-                try:
-                    filter_idx.append(np.where(filter_name==filter_value)[0][0])
-                except:
-                    raise ValueError("The filter", filter_value, "is not in dabatase, please add it")
+                filter_idx.append(np.where(filter_name==filter_value)[0][0])
 
             lambda_array_filters = filter_wavelength[filter_idx] #this is use for the convolution
             filter_array_model = filter_name[filter_idx]
@@ -1297,7 +1336,7 @@ class SedFitter(object):
                              mc,'sigma=', sigma,'mstar=', mstar,'theta_view=', theta_view,
                              'is not in the database, please try another combination')
         
-        return(lambda_model,flux_model_extincted)
+        return lambda_model,flux_model_extincted
             
     @property
     def print_default_filters(self):
@@ -1348,7 +1387,7 @@ class SedFitter(object):
         interp_kV = np.interp(0.55, klam, kkap)#in the visible
         
         norm_extc_law = interp_kkap/interp_kV
-        return(norm_extc_law)
+        return norm_extc_law
     
     def sed_convolution(self,filter_wave_resp,lambda_array_model,sed_lambda_model,flux_model_extincted):
         '''
@@ -1368,7 +1407,7 @@ class SedFitter(object):
             flux_model_extincted_CONV.append(I_filt)
         flux_model_extincted_CONV = np.array(flux_model_extincted_CONV)
         
-        return(flux_model_extincted_CONV)
+        return flux_model_extincted_CONV
 
     
     def sed_extinction(self,flux_model_log,av):
@@ -1394,7 +1433,7 @@ class SedFitter(object):
                                                         sed_lambda_model,
                                                         flux_model_log_extc)
         
-        return(flux_model_log_extc_conv)
+        return flux_model_log_extc_conv
     
 
     def chisq(self,flux_model,av):
@@ -1471,7 +1510,7 @@ class SedFitter(object):
             nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30]) #updating the number of points considered to be upper limits
             chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
-        return([chisq,chisq_nonlimit])
+        return [chisq,chisq_nonlimit]
 
     #chisq function to use with minimise (note change of inputs w.r.t. chisq)
     def chisq_to_minimize(self,av,flux_model):
@@ -1549,9 +1588,9 @@ class SedFitter(object):
             nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30]) #updating the number of points considered to be upper limits
             chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
-        return(chisq)
+        return chisq
     
-    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',progress=True,treat_errors='linear',avopt=0):
+    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',progress=True,avopt=0):
         #TODO: write proper function description.
         '''
         Fits the SED observations to the Z&T18 set of models
@@ -1577,10 +1616,10 @@ class SedFitter(object):
             and calculates the chi square as define in Z&T18 (See also De Buizer et al. 2017).
             'idl' is a translation of the IDL version that also performs a grid search,
             it keeps the compatibility with the previous version using the same constants and fits files.
-
+        
         progress: bool
             progress bar either True or False.
-
+            
         avopt: int
             This is only relevant when choosing method = 'idl'. It sets the visual extunction option.
             0 is equally distributed AV point in the range of (0,AV_max)
@@ -1595,8 +1634,16 @@ class SedFitter(object):
         if method not in ('grid_search', 'idl', 'minimize'):
             raise ValueError("'method' must be either 'minimize', 'grid_search' or 'idl'")
         
-        if treat_errors not in ('log', 'linear'):
-            raise ValueError("'treat_errors' must be either 'log' or 'linear'")
+        if method=='idl':
+            treat_errors = 'log'
+        if method=='minimize':
+            treat_errors = 'linear'
+        if method=='grid_search':
+            treat_errors = 'linear'
+        
+        #TODO: delete this
+#         if treat_errors not in ('log', 'linear'):
+#             raise ValueError("'treat_errors' must be either 'log' or 'linear'")
         
         self.dist = dist
         self.treat_errors = treat_errors
@@ -1616,7 +1663,10 @@ class SedFitter(object):
 
         filter_idx = []
         for filter_value in self.filter_array:
-            filter_idx.append(np.where(filter_name==filter_value)[0][0])
+            try:
+                filter_idx.append(np.where(filter_name==filter_value)[0][0])
+            except:
+                raise ValueError("The filter", filter_value, "is not in dabatase, please add it")
 
         self.lambda_array_model = filter_wavelength[filter_idx] #this is use for the convolution
         filter_array_model = filter_name[filter_idx]
@@ -1653,7 +1703,7 @@ class SedFitter(object):
             percentage_error = self.err_flux_array/self.flux_array
             errup_fit_log_arr=np.log10(1.+percentage_error,dtype=np.float64)# this is absolute error in log space
             errlo_fit_log_arr=-np.log10(1.-percentage_error,dtype=np.float64)# note 100% error means a infinite lower error in log
-
+            
             #these two lines are to avoid singularities in the case of error=0
             errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
             errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
@@ -1718,7 +1768,7 @@ class SedFitter(object):
                             
                 
         elif method == 'grid_search':
-            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA),disable= not progress):
+            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA),disable=not progress):
                 sed_model = np.loadtxt(master_dir+'/Model_SEDs/sed/'+model_data,unpack=True)
                 self.sed_lambda_model = sed_model[0] #micron
                 sed_flux_model = sed_model[1]
@@ -1819,7 +1869,7 @@ class SedFitter(object):
             mH=1.6733e-24
             clight=2.9979e14
 
-            for mc in tqdm(range(nmc),disable= not progress):
+            for mc in tqdm(range(nmc),disable=not progress):
                 for sigma in range(nsigma):
                     if avopt:
                         av_clump = sigma/1.6733e-24/1.8e21/2.0
@@ -2548,7 +2598,7 @@ class SedFitter(object):
             ascii.write(final_average_table,tablename)
             print('Table saved in ',tablename)
             
-        return(final_average_table)
+        return final_average_table
 
     #Indepent Plots
     #TODO: Put all the plots in this class
@@ -2796,6 +2846,7 @@ class ModelPlotter(FitterContainer):
         #to go out of the figure define a false 0.5 error for those marked as upper limit
         error_flux_for_SED_plot = self.err_flux_array/self.flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
+        
         plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,markersize=markersize,
                      uplims=self.upper_limit_array)
         plt.xlim(xlim)
