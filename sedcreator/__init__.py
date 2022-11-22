@@ -474,14 +474,14 @@ class SedFluxer:
                 #magnitude transformation for WISE depending on the above constants (band dependent)
                 Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
                 Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
-                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
+                Mcal_error_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
                 Mcal_error = M_0_inst-2.5*np.log10(fluc_error)-AC
 
                 #flux conversion for WISE
                 flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
                 #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
                 flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
-                bkg = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
+                bkg = F_nu_0*10.0**(-Mcal_error_bkg.data[0]/2.5) #Jy
                 fluc_error = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
 
             elif 'SOFIA 2.5m' in header['TELESCOP']:#To get around HAWC+ data
@@ -546,14 +546,14 @@ class SedFluxer:
                 #magnitude transformation for WISE depending on the above constants (band dependent)
                 Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
                 Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
-                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
+                Mcal_error_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
                 Mcal_error = M_0_inst-2.5*np.log10(fluc_error)-AC
 
                 #flux conversion for WISE
                 flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
                 #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
                 flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
-                bkg = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
+                bkg = F_nu_0*10.0**(-Mcal_error_bkg.data[0]/2.5) #Jy
                 fluc_error = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
                     
             else:
