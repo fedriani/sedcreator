@@ -37,7 +37,10 @@ Lsun2erg_s = u.L_sun.to(u.erg*u.s**-1)
 c_micron_s = c.to(u.micron*u.s**-1).value
 Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 
-#to track the version
+#constants for SedFluxer
+MJy_sr_degsq2Jy = (u.MJy*u.sr**-1*u.deg**2).to(u.Jy)
+
+#track the version
 __version__ = '0.9.1'
 
 class FluxerContainer():
@@ -103,16 +106,24 @@ class FluxerContainer():
         data,header = self.data
         flux_method = self.flux_method
 
-        #retrieves the pixel scale or size from the header
+        #retrieve the pixel scale based on the header
+        #DISCLAMER: The header is assumed to be right and pixels are squares, the user should check this
         if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
+            if 'CD2_1' in header:
+                pixel_scale_deg = (header['CD1_1']**2+header['CD2_1']**2)**0.5 #deg
+            elif 'CD2_1' not in header:
+                pixel_scale_deg = (header['CD1_1']**2)**0.5 #deg
+            else:
+                raise Exception('Problem with CD values, check image header')
         elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+            pixel_scale_deg = (header['CDELT1']**2)**0.5 #deg
         else:
-            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+            raise Exception('No CD nor CDELT were found in the header, so no pixscale could be retrieved')
+        pixel_scale_arcsec = pixel_scale_deg*3600.0 #arcsec
 
-        print('The aperture used is', round(self.aper_rad_pixel*pixel_scale,3), 'arcsec')
-        print('pixel scale is', round(pixel_scale,3), 'arcsec/pixel')
+
+        print('The aperture used is', round(self.aper_rad_pixel*pixel_scale_arcsec,3), 'arcsec')
+        print('pixel scale is', round(pixel_scale_arcsec,3), 'arcsec/pixel')
         print('~',round(self.aper_rad_pixel,3),'pixels are used for the aperture radius')
         if 'BUNIT' in header:
             print('units in the image are:', header['BUNIT'])
@@ -370,18 +381,25 @@ class SedFluxer:
         wcs_header = WCS(header).celestial
         x_source,y_source = wcs_header.world_to_pixel(central_coords)
         
-        #retrieves the pixel scale or size from the header
+        #retrieve the pixel scale based on the header
+        #DISCLAMER: The header is assumed to be right and pixels are squares, the user should check this
         if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
+            if 'CD2_1' in header:
+                pixel_scale_deg = (header['CD1_1']**2+header['CD2_1']**2)**0.5 #deg
+            elif 'CD2_1' not in header:
+                pixel_scale_deg = (header['CD1_1']**2)**0.5 #deg
+            else:
+                raise Exception('Problem with CD values, check image header')
         elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+            pixel_scale_deg = (header['CDELT1']**2)**0.5 #deg
         else:
-            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+            raise Exception('No CD nor CDELT were found in the header, so no pixscale could be retrieved')
+        pixel_scale_arcsec = pixel_scale_deg*3600.0 #arcsec
 
         #defines the aperture size in pixels
-        aper_rad_pixel = aper_rad/pixel_scale
-        inner_annu_pixel = inner_annu/pixel_scale
-        outer_annu_pixel = outer_annu/pixel_scale
+        aper_rad_pixel = aper_rad/pixel_scale_arcsec
+        inner_annu_pixel = inner_annu/pixel_scale_arcsec
+        outer_annu_pixel = outer_annu/pixel_scale_arcsec
         aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
         annulus_aperture = CircularAnnulus([[x_source,y_source]],
                                            r_in=inner_annu_pixel, r_out=outer_annu_pixel)
@@ -560,39 +578,23 @@ class SedFluxer:
                 raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
 
         else:
-            # Mengyao's conversion from MJy/sr to Jy/pixel
             if 'BUNIT' in header:
                 if 'MJy/sr' in header['BUNIT'] or 'MJY/SR' in header['BUNIT']: #mainly for Herschel and some Spitzer data (and IRAS)
-                    if 'CD1_1' in header:
-                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                        flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                        bkg = ap_phot['aper_bkg'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                        fluc_error = fluc_error*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                    elif 'CDELT1' in header:
-                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                        flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                        bkg = ap_phot['aper_bkg'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                        fluc_error = fluc_error*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                    else:
-                        raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
+                    flux = ap_phot['aperture_sum'].data[0]*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
+                    bkg = ap_phot['aper_bkg'].data[0]*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
+                    fluc_error = fluc_error*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
                 elif 'Jy/beam' in header['BUNIT']:#mainly for ALMA data or some other radio data
+                    #TODO: Check for other beam header posibilities
                     beam = np.pi/(4.0*np.log(2.0))*header['BMAJ']*header['BMIN']
                     if 'mJy/beam' in header['BUNIT']:
                         unit_factor_Jy = 0.001 #from mJy to Jy
                     else:
                         unit_factor_Jy = 1.0 #leave it in Jy
-                    if 'CD1_1' in header:
-                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                        fluc_error = unit_factor_Jy*fluc_error/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                    elif 'CDELT1' in header:
-                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                        fluc_error = unit_factor_Jy*fluc_error/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                    else:
-                        raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/pixel_scale_deg**2) #Jy
+                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/pixel_scale_deg**2) #Jy
+                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/pixel_scale_deg**2) #Jy
+                    fluc_error = unit_factor_Jy*fluc_error/(beam/pixel_scale_deg**2) #Jy
                 elif 'Jy/pix' in header['BUNIT']:
                     if 'mJy/pix' in header['BUNIT']:
                         unit_factor_Jy = 0.001 #from mJy to Jy
@@ -630,10 +632,10 @@ class SedFluxer:
                         unit_factor_Jy = 0.001 #from mJy to Jy
                     else:
                         unit_factor_Jy = 1.0 #leave it in Jy
-                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale**2 #Jy
-                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]*pixel_scale**2 #Jy
-                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]*pixel_scale**2 #Jy
-                    fluc_error = unit_factor_Jy*fluc_error*pixel_scale**2 #Jy
+                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale_arcsec**2 #Jy
+                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]*pixel_scale_arcsec**2 #Jy
+                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]*pixel_scale_arcsec**2 #Jy
+                    fluc_error = unit_factor_Jy*fluc_error*pixel_scale_arcsec**2 #Jy
                 else:
                     raise Exception('FUNITS (',header['FUNITS'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
             else:
@@ -687,18 +689,25 @@ class SedFluxer:
         wcs_header = WCS(header).celestial
         x_source,y_source = wcs_header.world_to_pixel(central_coords)
         
-        #retrieves the pixel scale or size from the header
+        #retrieve the pixel scale based on the header
+        #DISCLAMER: The header is assumed to be right and pixels are squares, the user should check this
         if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
+            if 'CD2_1' in header:
+                pixel_scale_deg = (header['CD1_1']**2+header['CD2_1']**2)**0.5 #deg
+            elif 'CD2_1' not in header:
+                pixel_scale_deg = (header['CD1_1']**2)**0.5 #deg
+            else:
+                raise Exception('Problem with CD values, check image header')
         elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+            pixel_scale_deg = (header['CDELT1']**2)**0.5 #deg
         else:
-            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+            raise Exception('No CD nor CDELT were found in the header, so no pixscale could be retrieved')
+        pixel_scale_arcsec = pixel_scale_deg*3600.0 #arcsec
 
         #defines the aperture size in pixels
-        aper_rad_pixel = aper_rad/pixel_scale
-        inner_annu_pixel = inner_annu/pixel_scale
-        outer_annu_pixel = outer_annu/pixel_scale
+        aper_rad_pixel = aper_rad/pixel_scale_arcsec
+        inner_annu_pixel = inner_annu/pixel_scale_arcsec
+        outer_annu_pixel = outer_annu/pixel_scale_arcsec
         aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
         annulus_aperture = CircularAnnulus([[x_source,y_source]],
                                            r_in=inner_annu_pixel, r_out=outer_annu_pixel)
@@ -882,7 +891,8 @@ class SedFluxer:
     
 
         return opt_rad
-
+        
+        
 class FitterContainer():
     '''
     A class to store the results from the SedFluxer class
