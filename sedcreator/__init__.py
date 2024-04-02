@@ -1725,7 +1725,6 @@ class SedFitter(object):
             errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
             
         else:
-            #NOTE: We keep the same names as above even though they are linear now
             #preparing the fluxes and errors in linear space
             flux_fit_arr=self.flux_array
             linear_err = copy.deepcopy(self.err_flux_array) #referencing different arrays in memory
@@ -1824,6 +1823,17 @@ class SedFitter(object):
                     
                 else:
                     for av in AV_array:
+                        flux_fit_arr=self.flux_array
+                        linear_err = copy.deepcopy(self.err_flux_array) #referencing different arrays in memory
+                        errup_fit_lin_arr=linear_err# this is absolute error in linear space
+                        errlo_fit_lin_arr=linear_err# this is absolute error in linear space
+                        
+                        #these two lines are to avoid singularities in the case of error=0
+                        errup_fit_lin_arr[errup_fit_lin_arr==0.0]=1.0e-33
+                        errlo_fit_lin_arr[errlo_fit_lin_arr==0.0]=1.0e-33
+                        errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set upper limit errors to flux value
+                        errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set lower limit errors to flux value
+
                         #extincting the model flux using the av value from AV_array
                         #and the normalised (in Vband) extc_law
                         flux_model_Jy_extincted = flux_model_Jy*10**(-0.4*av*norm_extc_law)
