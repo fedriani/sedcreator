@@ -41,7 +41,7 @@ Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 MJy_sr_degsq2Jy = (u.MJy*u.sr**-1*u.deg**2).to(u.Jy)
 
 #track the version
-__version__ = '0.9.2'
+__version__ = '0.9.3'
 
 class FluxerContainer():
     '''
