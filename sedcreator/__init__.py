@@ -41,7 +41,7 @@ Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 MJy_sr_degsq2Jy = (u.MJy*u.sr**-1*u.deg**2).to(u.Jy)
 
 #track the version
-__version__ = '0.9.3'
+__version__ = '0.9.4'
 
 class FluxerContainer():
     '''
@@ -2878,7 +2878,7 @@ class ModelPlotter(FitterContainer):
         if title is not None:
             plt.title(title)
         if colorbar:
-            cbar = plt.colorbar(cmap,label=r'$\chi^2$')
+            cbar = plt.colorbar(mappable=cmap, ax=plt.gca(), label=r'$\chi^2$')
             cbar.minorticks_off()
             cbar.set_ticks(np.logspace(np.log10(models['chisq'].min()),
                                        np.log10(models['chisq'].max()),num=5))
@@ -2954,14 +2954,14 @@ class ModelPlotter(FitterContainer):
         ax1.set_xscale('log')
         ax1.set_yscale('log')
 
-        ax1.plot([0,triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
-                 [triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
-                  triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
+        ax1.plot([0,triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
+                 [triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0],
+                  triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
                  'k--',alpha=0.1)
 
-        ax1.plot([triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
-                  triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
-                 [0,triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
+        ax1.plot([triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0],
+                  triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
+                 [0,triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
                  'k--',alpha=0.1)
 
 
@@ -3008,14 +3008,14 @@ class ModelPlotter(FitterContainer):
         ax2.set_xscale('log')
         ax2.set_yscale('log')
 
-        ax2.plot([0,triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
-                 [triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
-                  triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
+        ax2.plot([0,triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
+                 [triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0],
+                  triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
                  'k--',alpha=0.1)
 
-        ax2.plot([triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
-                  triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
-                 [0,triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
+        ax2.plot([triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0],
+                  triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
+                 [0,triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
                  'k--',alpha=0.1)
 
         ax2.set_xlim(8.0,600.0)
@@ -3061,14 +3061,14 @@ class ModelPlotter(FitterContainer):
         ax3.set_xscale('log')
         ax3.set_yscale('log')
 
-        ax3.plot([0.0,triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
-                 [triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
-                  triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
+        ax3.plot([0.0,triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
+                 [triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0],
+                  triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
                  'k--',alpha=0.1)
 
-        ax3.plot([triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
-                  triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
-                 [0.0,triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
+        ax3.plot([triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0],
+                  triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
+                 [0.0,triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
                  'k--',alpha=0.1)
 
 
@@ -3105,7 +3105,7 @@ class ModelPlotter(FitterContainer):
             print('Image saved in ',figname)
             
         plt.show()
-    
+
     def plot3d(self,models,figsize=(8,8),markersize=200,cmap='rainbow_r',title=None,figname=None):
         '''
         3D plot for the SED model results
