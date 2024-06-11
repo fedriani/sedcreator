@@ -21,7 +21,7 @@ rcParams['mathtext.fontset'] = 'cm'
 from astropy.io import fits as pyfits
 from astropy.io import ascii
 import astropy.units as u
-from astropy.table import Table, unique
+from astropy.table import Table, unique, Column
 from astropy.wcs import WCS
 from astropy.time import Time
 from astropy.visualization import simple_norm
@@ -1030,15 +1030,15 @@ class FitterContainer():
                  float,float,float,float,float,
                  float,float,float,float,float]
         
-        table_model_info = Table(data=[model_info[:,0],model_info[:,1],model_info[:,2],
-                                       model_info[:,3],model_info[:,4],model_info[:,5],
-                                       model_info[:,6],model_info[:,7],model_info[:,8],
-                                       model_info[:,9],model_info[:,10],model_info[:,11],
-                                       model_info[:,12],model_info[:,13],model_info[:,14],
-                                       model_info[:,15],model_info[:,16],model_info[:,17],
-                                       model_info[:,18],model_info[:,19],model_info[:,20],
-                                       model_info[:,21]],
-                                 names = columns_names, units = units, dtype= dtype)
+        # Create columns with data, names, dtypes, and units
+        columns = []
+        for i, name in enumerate(columns_names):
+            column_data = model_info[:, i]
+            col = Column(column_data, name=name, dtype=dtype[i], unit=units[i])
+            columns.append(col)
+
+        
+        table_model_info = Table(columns)
         
         #sort the table by chisq values and filter by unique values
         table_model_info.sort('chisq')
