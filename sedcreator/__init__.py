@@ -1030,15 +1030,16 @@ class FitterContainer():
                  float,float,float,float,float,
                  float,float,float,float,float]
         
-        table_model_info = Table(data=[model_info[:,0],model_info[:,1],model_info[:,2],
-                                       model_info[:,3],model_info[:,4],model_info[:,5],
-                                       model_info[:,6],model_info[:,7],model_info[:,8],
-                                       model_info[:,9],model_info[:,10],model_info[:,11],
-                                       model_info[:,12],model_info[:,13],model_info[:,14],
-                                       model_info[:,15],model_info[:,16],model_info[:,17],
-                                       model_info[:,18],model_info[:,19],model_info[:,20],
-                                       model_info[:,21]],
-                                 names = columns_names, units = units, dtype= dtype)
+        table_model_info = Table(data=[model_info[:,1]*units[1],model_info[:,2]*units[2],
+                                       model_info[:,3]*units[3],model_info[:,4]*units[4],model_info[:,5]*units[5],
+                                       model_info[:,6]*units[6],model_info[:,7]*units[7],model_info[:,8]*units[8],
+                                       model_info[:,9]*units[9],model_info[:,10]*units[10],model_info[:,11]*units[11],
+                                       model_info[:,12]*units[12],model_info[:,13]*units[13],model_info[:,14]*units[14],
+                                       model_info[:,15]*units[15],model_info[:,16]*units[16],model_info[:,17]*units[17],
+                                       model_info[:,18]*units[18],model_info[:,19]*units[19],model_info[:,20]*units[20],
+                                       model_info[:,21]*units[21]],
+                                 names = columns_names[1:], dtype= dtype[1:])
+                                 # names = columns_names, units = units, dtype= dtype)
         
         #sort the table by chisq values and filter by unique values
         table_model_info.sort('chisq')
