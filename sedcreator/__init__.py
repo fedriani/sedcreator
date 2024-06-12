@@ -41,7 +41,7 @@ Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 MJy_sr_degsq2Jy = (u.MJy*u.sr**-1*u.deg**2).to(u.Jy)
 
 #track the version
-__version__ = '0.9.6'
+__version__ = '0.9.7'
 
 class FluxerContainer():
     '''
@@ -1030,7 +1030,7 @@ class FitterContainer():
                  float,float,float,float,float,
                  float,float,float,float,float]
         
-        table_model_info = Table(data=[model_info[:,1]*units[1],model_info[:,2]*units[2],
+        table_model_info = Table(data=[model_info[:,0],model_info[:,1]*units[1],model_info[:,2]*units[2],
                                        model_info[:,3]*units[3],model_info[:,4]*units[4],model_info[:,5]*units[5],
                                        model_info[:,6]*units[6],model_info[:,7]*units[7],model_info[:,8]*units[8],
                                        model_info[:,9]*units[9],model_info[:,10]*units[10],model_info[:,11]*units[11],
@@ -1038,7 +1038,7 @@ class FitterContainer():
                                        model_info[:,15]*units[15],model_info[:,16]*units[16],model_info[:,17]*units[17],
                                        model_info[:,18]*units[18],model_info[:,19]*units[19],model_info[:,20]*units[20],
                                        model_info[:,21]*units[21]],
-                                 names = columns_names[1:], dtype= dtype[1:])
+                                 names = columns_names, dtype= dtype)
                                  # names = columns_names, units = units, dtype= dtype)
         
         #sort the table by chisq values and filter by unique values
