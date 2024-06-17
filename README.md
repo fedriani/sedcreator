@@ -29,3 +29,7 @@ sedcreator uses multiple resources from Photutils, so please also acknowledgment
 ```
     https://photutils.readthedocs.io/en/stable/citation.html
 ```
+
+## SOMA data
+
+The data used in the SOMA papers can be accessed at this repository: https://github.com/fedriani/SOMA
