@@ -41,7 +41,7 @@ Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 MJy_sr_degsq2Jy = (u.MJy*u.sr**-1*u.deg**2).to(u.Jy)
 
 #track the version
-__version__ = '0.9.7'
+__version__ = '0.9.8'
 
 class FluxerContainer():
     '''
@@ -1038,7 +1038,7 @@ class FitterContainer():
                                        model_info[:,15]*units[15],model_info[:,16]*units[16],model_info[:,17]*units[17],
                                        model_info[:,18]*units[18],model_info[:,19]*units[19],model_info[:,20]*units[20],
                                        model_info[:,21]*units[21]],
-                                 names = columns_names, dtype= dtype)
+                                 names = columns_names, dtype=dtype)
                                  # names = columns_names, units = units, dtype= dtype)
         
         #sort the table by chisq values and filter by unique values
@@ -2414,8 +2414,9 @@ class SedFitter(object):
         dtype = [str,int,float,float,float,float,float,float,float,float,float,float,float,
                  float,float,float,float,float,float,float,float,float,float,float,float,float,
                  float,float,float,float,float,float,float,float,float,float,float,float,float]
-
-        final_average_table = Table(data = data, names = columns_names, units=units, dtype=dtype)
+        
+        final_average_table = Table(data = data, names = columns_names, dtype=dtype)
+        #final_average_table = Table(data = data, names = columns_names, units=units, dtype=dtype)
 
 
         if chisq_cut is not None and core_radius_cut is None:
