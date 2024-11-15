@@ -41,7 +41,7 @@ Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
 MJy_sr_degsq2Jy = (u.MJy*u.sr**-1*u.deg**2).to(u.Jy)
 
 #track the version
-__version__ = '0.9.8'
+__version__ = '0.9.9'
 
 class FluxerContainer():
     '''
@@ -1518,7 +1518,7 @@ class SedFitter(object):
 
             chisq = (chisq_up+chisq_lo)/float(nfit)
 
-            nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30]) #updating the number of points considered to be upper limits
+            nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr!=self.flux_array]) #updating the number of points considered to be upper limits
             chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
         return [chisq,chisq_nonlimit]
