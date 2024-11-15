@@ -1596,7 +1596,7 @@ class SedFitter(object):
 
             chisq = (chisq_up+chisq_lo)/float(nfit)
 
-            nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30]) #updating the number of points considered to be upper limits
+            nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr!=self.flux_array]) #updating the number of points considered to be upper limits
             chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
         return chisq
@@ -1855,7 +1855,7 @@ class SedFitter(object):
 
                         chisq = (chisq_up+chisq_lo)/float(nfit)
 
-                        nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30])
+                        nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr!=self.flux_array])
                         chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
 
 
