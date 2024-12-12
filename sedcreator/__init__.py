@@ -925,7 +925,7 @@ class FitterContainer():
         return mc,sigma,mstar,theta_view
 
     #TODO: Change mu variable by theta or theta_view
-    def get_model_info(self,keys=['mcore','sigma','mstar','theta_view'],tablename=None):
+    def get_model_info(self,keys=['mcore','sigma','mstar','theta_view'],sorted_by='chisq_nonlim',tablename=None):
         '''
         Gets the model information from the results of the SED fit. Automatically sorts the results by chisq.
         Columns units are given as `astropy.units`
@@ -938,6 +938,11 @@ class FitterContainer():
             ['mcore','sigma','mstar','theta_view'] for the 8640 models including the viewing angle
             Default is ['mcore','sigma','mstar','theta_view']
 
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) or chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
+
         tablename: str, optional
             A path, or a Python file-like object. Note that fname is used verbatim,
             and there is no attempt to make the extension. Default is None.
@@ -947,7 +952,10 @@ class FitterContainer():
         ----------
         table: `astropy.table` with all the model information based on the given keys
         '''
-                        
+        
+        if sorted_by not in ('chisq', 'chisq_nonlim'):
+            raise ValueError("'sorted_by' must be either 'chisq', or 'chisq_nonlim'")
+        
         models = self.models_array
         master_dir = self.master_dir
         norm_extc_law = self.extc_law
@@ -962,7 +970,7 @@ class FitterContainer():
         columns_names = ['mcore','sigma','mstar','theta_view','av','chisq','chisq_nonlim']
         
         models_table = Table(data=models,names = columns_names) #create astropy table
-        models_table.sort('chisq') #sort by chisq
+        models_table.sort(sorted_by) #sort by chisq or chisq_nonlim
         models_table_filter = unique(models_table,keys=keys) #filter by keys
     
         model_info = []
@@ -1012,12 +1020,21 @@ class FitterContainer():
                 
         model_info = np.array(model_info,dtype=object)
         
-        columns_names = ['SED_number','chisq','chisq_nonlim',
-                         'mcore','sigma','mstar','theta_view',
-                         'dist','av','rcore','massenv','theta_w_esc',
-                         'rstar','lstar','tstar','mdisk','rdisk',
-                         'mdotd','lbol','lbol_iso','lbol_av','t_now']
+        if sorted_by=='chisq_nonlim':
+            columns_names = ['SED_number','chisq_nonlim','chisq',
+                             'mcore','sigma','mstar','theta_view',
+                             'dist','av','rcore','massenv','theta_w_esc',
+                             'rstar','lstar','tstar','mdisk','rdisk',
+                             'mdotd','lbol','lbol_iso','lbol_av','t_now']
 
+        else:
+            columns_names = ['SED_number','chisq','chisq_nonlim',
+                             'mcore','sigma','mstar','theta_view',
+                             'dist','av','rcore','massenv','theta_w_esc',
+                             'rstar','lstar','tstar','mdisk','rdisk',
+                             'mdotd','lbol','lbol_iso','lbol_av','t_now']
+
+            
         units = [u.dimensionless_unscaled,u.dimensionless_unscaled,u.dimensionless_unscaled,
                  u.M_sun,u.g*u.cm**-2,u.M_sun,u.deg,
                  u.pc,u.mag,u.pc,u.M_sun,u.deg,
@@ -1030,21 +1047,33 @@ class FitterContainer():
                  float,float,float,float,float,
                  float,float,float,float,float]
         
-        table_model_info = Table(data=[model_info[:,0],model_info[:,1]*units[1],model_info[:,2]*units[2],
-                                       model_info[:,3]*units[3],model_info[:,4]*units[4],model_info[:,5]*units[5],
-                                       model_info[:,6]*units[6],model_info[:,7]*units[7],model_info[:,8]*units[8],
-                                       model_info[:,9]*units[9],model_info[:,10]*units[10],model_info[:,11]*units[11],
-                                       model_info[:,12]*units[12],model_info[:,13]*units[13],model_info[:,14]*units[14],
-                                       model_info[:,15]*units[15],model_info[:,16]*units[16],model_info[:,17]*units[17],
-                                       model_info[:,18]*units[18],model_info[:,19]*units[19],model_info[:,20]*units[20],
-                                       model_info[:,21]*units[21]],
-                                 names = columns_names, dtype=dtype)
-                                 # names = columns_names, units = units, dtype= dtype)
+        if sorted_by=='chisq_nonlim':
+            table_model_info = Table(data=[model_info[:,0],model_info[:,2]*units[2],model_info[:,1]*units[1],
+                                           model_info[:,3]*units[3],model_info[:,4]*units[4],model_info[:,5]*units[5],
+                                           model_info[:,6]*units[6],model_info[:,7]*units[7],model_info[:,8]*units[8],
+                                           model_info[:,9]*units[9],model_info[:,10]*units[10],model_info[:,11]*units[11],
+                                           model_info[:,12]*units[12],model_info[:,13]*units[13],model_info[:,14]*units[14],
+                                           model_info[:,15]*units[15],model_info[:,16]*units[16],model_info[:,17]*units[17],
+                                           model_info[:,18]*units[18],model_info[:,19]*units[19],model_info[:,20]*units[20],
+                                           model_info[:,21]*units[21]],
+                                     names = columns_names, dtype= dtype)
+                                     # names = columns_names, units = units, dtype= dtype)
+        else:
+            table_model_info = Table(data=[model_info[:,0],model_info[:,1]*units[1],model_info[:,2]*units[2],
+                                           model_info[:,3]*units[3],model_info[:,4]*units[4],model_info[:,5]*units[5],
+                                           model_info[:,6]*units[6],model_info[:,7]*units[7],model_info[:,8]*units[8],
+                                           model_info[:,9]*units[9],model_info[:,10]*units[10],model_info[:,11]*units[11],
+                                           model_info[:,12]*units[12],model_info[:,13]*units[13],model_info[:,14]*units[14],
+                                           model_info[:,15]*units[15],model_info[:,16]*units[16],model_info[:,17]*units[17],
+                                           model_info[:,18]*units[18],model_info[:,19]*units[19],model_info[:,20]*units[20],
+                                           model_info[:,21]*units[21]],
+                                     names = columns_names, dtype= dtype)
+                                     # names = columns_names, units = units, dtype= dtype)
         
-        #sort the table by chisq values and filter by unique values
-        table_model_info.sort('chisq')
+        #sort the table by chisq or chisq_nonlim values and filter by unique values
+        table_model_info.sort(sorted_by)
         table_model_unique = unique(table_model_info,keys=keys)
-        table_model_unique.sort('chisq') #the previous step sort them by they keys
+        table_model_unique.sort(sorted_by) #the previous step sort them by they keys
                 
         #For format consistency
         table_model_unique['chisq'].info.format = '%.5f'
@@ -1062,6 +1091,48 @@ class FitterContainer():
             print('Table saved in ',tablename)
         
         return table_model_unique
+
+
+    @property
+    def best_model(self):
+        if self.__best_model is None:
+            self.__best_model = self.get_best_model()
+        return self.__best_model
+    
+    def get_best_model(self):
+        FULL_MODEL = self.models_array
+        
+        nmc=15
+        mc_arr=np.array([10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0])
+
+        nsigma=4
+        sigma_arr=np.array([0.1,0.316,1.0,3.16])
+
+        nms=14
+        ms_arr=np.array([0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0])
+
+        nmu=20
+        mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
+        mu_arr=mu_arr[::-1] #reversing the array
+        theta_arr=np.arccos(mu_arr)/np.pi*180.0
+        
+        self.best_mc_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][0])
+        self.best_sigma_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][1])
+        self.best_ms_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][2])
+        self.best_theta_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][3])
+
+        self.best_AV = FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][4]
+        self.best_chisq = FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][5]
+
+        print('best Mc',mc_arr[self.best_mc_idx-1])
+        print('best sigma',sigma_arr[self.best_sigma_idx-1])
+        print('best m*',ms_arr[self.best_ms_idx-1])
+        print('best theta_view', theta_arr[self.best_theta_idx-1])
+
+        print('best AV', self.best_AV)
+        print('best chisq', self.best_chisq)
+        
+        return self.best_mc_idx,self.best_sigma_idx,self.best_ms_idx,self.best_theta_idx,self.best_AV
 
 
     @property
@@ -2331,7 +2402,7 @@ class SedFitter(object):
         return
 
 
-    def get_average_model(self,models,number_of_models=5,chisq_cut=None,core_radius_cut=None,method=None,tablename=None):
+    def get_average_model(self,models,sorted_by='chisq_nonlim',number_of_models=5,chisq_cut=None,core_radius_cut=None,method=None,tablename=None):
         '''
         Get the average model by means of calculating the geometric mean
         for all parameters except for av, theta_view, and theta_w_esc from which arithmetic mean is calculated
@@ -2347,6 +2418,11 @@ class SedFitter(object):
         ----------
         models: table, `astropy.table`
             models to be averaged over. It should be an astropy table got from the get_model_info() function.
+            
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) or chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         number_of_models: int
             Number of models to be used for the average for method 1.
@@ -2373,6 +2449,9 @@ class SedFitter(object):
         ----------
         table: `astropy.table` with all the model information based on the given keys
         '''
+        
+        if sorted_by not in ('chisq', 'chisq_nonlim'):
+            raise ValueError("'sorted_by' must be either 'chisq', or 'chisq_nonlim'")
         
         master_dir = self.master_dir
         
@@ -2414,13 +2493,14 @@ class SedFitter(object):
         dtype = [str,int,float,float,float,float,float,float,float,float,float,float,float,
                  float,float,float,float,float,float,float,float,float,float,float,float,float,
                  float,float,float,float,float,float,float,float,float,float,float,float,float]
-        
-        final_average_table = Table(data = data, names = columns_names, dtype=dtype)
+
+        final_average_table = Table(data = data,names = columns_names, dtype = dtype)
         #final_average_table = Table(data = data, names = columns_names, units=units, dtype=dtype)
 
-
+        models.sort(sorted_by)
+        
         if chisq_cut is not None and core_radius_cut is None:
-            average_model_table_chisq = models[models['chisq']<=chisq_cut]
+            average_model_table_chisq = models[models[sorted_by]<=chisq_cut]
 
             number_of_models = len(average_model_table_chisq)
             if number_of_models==0:
@@ -2526,7 +2606,7 @@ class SedFitter(object):
             core_radius_cut_au = core_radius_cut * distance #arcsec x pc = au
             core_radius_cut_pc = core_radius_cut_au*u.au.to(u.pc) #from au to pc
 
-            average_model_table_chisq_rcore = models[(models['chisq']<=chisq_cut) & (models['rcore']<=core_radius_cut_pc)]
+            average_model_table_chisq_rcore = models[(models[sorted_by]<=chisq_cut) & (models['rcore']<=core_radius_cut_pc)]
 
             number_of_models = len(average_model_table_chisq_rcore)
             if number_of_models==0:
@@ -2621,6 +2701,7 @@ class SedFitter(object):
             print('Table saved in ',tablename)
             
         return final_average_table
+
 
     #Indepent Plots
     #TODO: Put all the plots in this class
@@ -2797,7 +2878,7 @@ class ModelPlotter(FitterContainer):
         plt.show()
 
         
-    def plot_multiple_seds(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',markersize=6,cmap='rainbow_r',colorbar=True,title=None,figname=None):
+    def plot_multiple_seds(self,models=None,sorted_by='chisq_nonlim',figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',markersize=6,cmap='rainbow_r',colorbar=True,title=None,figname=None):
         '''
         Plots multiple SEDs.
         
@@ -2808,6 +2889,11 @@ class ModelPlotter(FitterContainer):
 
         figsize: tuple
             specify the size of the figure. Default is (6,4)
+            
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) or chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         xlim: array
             array to specify the limits in the x axis. Default is [1.0,1000.0]
@@ -2819,7 +2905,7 @@ class ModelPlotter(FitterContainer):
             defines the marker style and color like matplotlib. Default is 'k*'
             
         markersize: int
-            defines the marker size. Default is 6
+            defines the marker size. Default is 6            
 
         cmap: str
             defines the colormap like matplotlib of the SEDs. Default is 'rainbow_r'
@@ -2841,12 +2927,17 @@ class ModelPlotter(FitterContainer):
         plot of the multiple SEDs
         '''
         
+        if sorted_by not in ('chisq', 'chisq_nonlim'):
+            raise ValueError("'sorted_by' must be either 'chisq', or 'chisq_nonlim'")
+        
+        models.sort(sorted_by)
+        
         master_dir = self.master_dir
         norm_extc_law = self.extc_law
         
         cmap = plt.cm.ScalarMappable(cmap=cmap,
-                                     norm=colors.LogNorm(vmin=models['chisq'].min(),
-                                                         vmax=models['chisq'].max()))
+                                     norm=colors.LogNorm(vmin=models[sorted_by][0],
+                                                         vmax=models[sorted_by][-1]))
         #cmap.set_array([])
 
         plt.figure(figsize=figsize)
@@ -2855,14 +2946,14 @@ class ModelPlotter(FitterContainer):
             lambda_model = sed[0] #micron
             flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*self.dist)**2.0) #from Lsun to erg s-1 cm-2
             flux_model_extincted = flux_model*10.0**(-0.4*ind_mod['av']*norm_extc_law)
-            plt.plot(lambda_model,flux_model_extincted,'-',linewidth=0.5,zorder=-ind_mod['chisq'],c=cmap.to_rgba(ind_mod['chisq']))
+            plt.plot(lambda_model,flux_model_extincted,'-',linewidth=0.5,zorder=-ind_mod[sorted_by],c=cmap.to_rgba(ind_mod[sorted_by]))
            
-        best_model = models[models['chisq']==models['chisq'].min()]
+        best_model = models[models[sorted_by]==models[sorted_by][0]]
         sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+best_model['SED_number'].data[0]+'.dat',unpack=True)
         lambda_model = sed[0] #micron
         flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*self.dist)**2.0) #from Lsun to erg s-1 cm-2
         flux_model_extincted = flux_model*10.0**(-0.4*best_model['av']*norm_extc_law)
-        plt.plot(lambda_model,flux_model_extincted,'k-',linewidth=1.0,zorder=-best_model['chisq'].data[0])
+        plt.plot(lambda_model,flux_model_extincted,'k-',linewidth=1.0,zorder=-best_model[sorted_by].data[0])
         source_nu_Fnu = c_micron_s/self.lambda_array*self.flux_array*Jy2erg_s_cm2 #erg s-1 cm-2
         #next two lines is to avoid lower limits with large errors
         #to go out of the figure define a false 0.5 error for those marked as upper limit
@@ -2882,19 +2973,20 @@ class ModelPlotter(FitterContainer):
         if colorbar:
             cbar = plt.colorbar(mappable=cmap, ax=plt.gca(), label=r'$\chi^2$')
             cbar.minorticks_off()
-            cbar.set_ticks(np.logspace(np.log10(models['chisq'].min()),
-                                       np.log10(models['chisq'].max()),num=5))
+            cbar.set_ticks(np.logspace(np.log10(models[sorted_by][0]),
+                                       np.log10(models[sorted_by][-1]),num=5))
             #trick to consider the adecuate number of decimals in round
-            dec = int(np.floor(np.abs(np.log10(models['chisq'].min()))))+1 #it has to be an integer
-            cbar.set_ticklabels(np.around(np.logspace(np.log10(models['chisq'].min()),
-                                                      np.log10(models['chisq'].max()),num=5),decimals=dec))
+            dec = int(np.floor(np.abs(np.log10(models[sorted_by][0]))))+1 #it has to be an integer
+            cbar.set_ticklabels(np.around(np.logspace(np.log10(models[sorted_by][0]),
+                                                      np.log10(models[sorted_by][-1]),num=5),decimals=dec))
+            
         if figname is not None:
             plt.savefig(figname, dpi=300, bbox_inches="tight")
             print('Image saved in ',figname)
         plt.show()
     
     
-    def plot2d(self,models,figsize=(10,5),marker='s',markersize=50,cmap='rainbow_r',title=None,figname=None):
+    def plot2d(self,models,sorted_by='chisq_nonlim',figsize=(10,5),marker='s',markersize=50,cmap='rainbow_r',title=None,figname=None):
         '''
         2D Plots of the SEDs results.
         
@@ -2903,6 +2995,11 @@ class ModelPlotter(FitterContainer):
         models: `astropy.table`
             Table with the sed results.
 
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) or chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
+            
         figsize: tuple
             specify the size of the figure. Default is (10,5)
 
@@ -2932,20 +3029,21 @@ class ModelPlotter(FitterContainer):
         fig, axs = plt.subplots(1, 3, constrained_layout=True,figsize=figsize)
 
         triple_MC_sigma = unique(models,keys=['mcore','sigma'])
+        triple_MC_sigma.sort(sorted_by)
         ax1 = axs[0]
         sct1 = ax1.scatter(triple_MC_sigma['mcore'],
                            triple_MC_sigma['sigma'],
                            linewidths=1, alpha=.8,
                            #edgecolor='k',
                            s = markersize,
-                           c=triple_MC_sigma['chisq'],
+                           c=triple_MC_sigma[sorted_by],
                            marker=marker,
                            norm=colors.LogNorm(),
                            cmap=cmap,
                            zorder=-1)
 
-        sct1_best = ax1.scatter(triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
-                                triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
+        sct1_best = ax1.scatter(triple_MC_sigma['mcore'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]],
+                                triple_MC_sigma['sigma'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]],
                                 linewidths=1,
                                 alpha=1.0,
                                 s = 100,
@@ -2956,25 +3054,25 @@ class ModelPlotter(FitterContainer):
         ax1.set_xscale('log')
         ax1.set_yscale('log')
 
-        ax1.plot([0,triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
-                 [triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0],
-                  triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
+        ax1.plot([0,triple_MC_sigma['mcore'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]].value[0]],
+                 [triple_MC_sigma['sigma'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]].value[0],
+                  triple_MC_sigma['sigma'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]].value[0]],
                  'k--',alpha=0.1)
 
-        ax1.plot([triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0],
-                  triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
-                 [0,triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()].value[0]],
+        ax1.plot([triple_MC_sigma['mcore'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]].value[0],
+                  triple_MC_sigma['mcore'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]].value[0]],
+                 [0,triple_MC_sigma['sigma'][triple_MC_sigma[sorted_by]==triple_MC_sigma[sorted_by][0]].value[0]],
                  'k--',alpha=0.1)
 
 
         ax1.set_xlim(8.0,600.0)
         ax1.set_ylim(0.05,4.0)
 
-        ax1.set_xticks([10.0,40.0,120.0,480.0])
-        ax1.set_yticks(np.unique(models['sigma']))
+        ax1.set_xticks([10.0,40.0,120.0,480.0]) #mc
+        ax1.set_yticks([0.1,0.316,1.0,3.16]) #sigma
 
-        ax1.set_xticklabels([10.0,40.0,120.0,480.0])
-        ax1.set_yticklabels(np.unique(models['sigma']))
+        ax1.set_xticklabels([10.0,40.0,120.0,480.0]) #mc
+        ax1.set_yticklabels([0.1,0.316,1.0,3.16]) #sigma
 
         ax1.minorticks_off()#turning off minor ticks
         
@@ -2985,6 +3083,7 @@ class ModelPlotter(FitterContainer):
 
 
         triple_MC_ms = unique(models,keys=['mcore','mstar'])
+        triple_MC_ms.sort(sorted_by)
         ax2 = axs[1]
         sct2 = ax2.scatter(triple_MC_ms['mcore'],
                            triple_MC_ms['mstar'],
@@ -2992,14 +3091,14 @@ class ModelPlotter(FitterContainer):
                            alpha=.8,
                            #edgecolor='k',
                            s = markersize,
-                           c=triple_MC_ms['chisq'],
+                           c=triple_MC_ms[sorted_by],
                            marker=marker,
                            norm=colors.LogNorm(),
                            cmap=cmap,
                            zorder=-1)
 
-        sct2_best = ax2.scatter(triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
-                                triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
+        sct2_best = ax2.scatter(triple_MC_ms['mcore'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]],
+                                triple_MC_ms['mstar'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]],
                                 linewidths=1,
                                 alpha=1.0,
                                 s = 100,
@@ -3010,24 +3109,24 @@ class ModelPlotter(FitterContainer):
         ax2.set_xscale('log')
         ax2.set_yscale('log')
 
-        ax2.plot([0,triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
-                 [triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0],
-                  triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
+        ax2.plot([0,triple_MC_ms['mcore'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]].value[0]],
+                 [triple_MC_ms['mstar'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]].value[0],
+                  triple_MC_ms['mstar'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]].value[0]],
                  'k--',alpha=0.1)
 
-        ax2.plot([triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0],
-                  triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
-                 [0,triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()].value[0]],
+        ax2.plot([triple_MC_ms['mcore'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]].value[0],
+                  triple_MC_ms['mcore'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]].value[0]],
+                 [0,triple_MC_ms['mstar'][triple_MC_ms[sorted_by]==triple_MC_ms[sorted_by][0]].value[0]],
                  'k--',alpha=0.1)
 
         ax2.set_xlim(8.0,600.0)
         ax2.set_ylim(0.4,200.0)
 
-        ax2.set_xticks([10.0,40.0,120.0,480.0])
-        ax2.set_yticks([0.5,2.0,8.0,32.0,128.0])
+        ax2.set_xticks([10.0,40.0,120.0,480.0]) #mc
+        ax2.set_yticks([0.5,2.0,8.0,32.0,128.0]) #m*
 
-        ax2.set_xticklabels([10.0,40.0,120.0,480.0])
-        ax2.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
+        ax2.set_xticklabels([10.0,40.0,120.0,480.0]) #mc
+        ax2.set_yticklabels([0.5,2.0,8.0,32.0,128.0]) #m*
 
         ax2.minorticks_off()#turning off minor ticks
         
@@ -3038,6 +3137,7 @@ class ModelPlotter(FitterContainer):
 
 
         triple_sigma_ms = unique(models,keys=['sigma','mstar'])
+        triple_sigma_ms.sort(sorted_by)
         ax3 = axs[2]
         sct3 = ax3.scatter(triple_sigma_ms['sigma'],
                            triple_sigma_ms['mstar'],
@@ -3045,14 +3145,14 @@ class ModelPlotter(FitterContainer):
                            alpha=.8,
                            #edgecolor='k',
                            s = markersize,
-                           c=triple_sigma_ms['chisq'],
+                           c=triple_sigma_ms[sorted_by],
                            marker=marker,
                            norm=colors.LogNorm(),
                            cmap=cmap,
                            zorder=-1)
 
-        sct3_best = ax3.scatter(triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
-                                triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
+        sct3_best = ax3.scatter(triple_sigma_ms['sigma'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]],
+                                triple_sigma_ms['mstar'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]],
                                 linewidths=1,
                                 alpha=1.0,
                                 s = 100,
@@ -3063,25 +3163,25 @@ class ModelPlotter(FitterContainer):
         ax3.set_xscale('log')
         ax3.set_yscale('log')
 
-        ax3.plot([0.0,triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
-                 [triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0],
-                  triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
+        ax3.plot([0.0,triple_sigma_ms['sigma'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]].value[0]],
+                 [triple_sigma_ms['mstar'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]].value[0],
+                  triple_sigma_ms['mstar'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]].value[0]],
                  'k--',alpha=0.1)
 
-        ax3.plot([triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0],
-                  triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
-                 [0.0,triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()].value[0]],
+        ax3.plot([triple_sigma_ms['sigma'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]].value[0],
+                  triple_sigma_ms['sigma'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]].value[0]],
+                 [0.0,triple_sigma_ms['mstar'][triple_sigma_ms[sorted_by]==triple_sigma_ms[sorted_by][0]].value[0]],
                  'k--',alpha=0.1)
 
 
         ax3.set_xlim(0.05,4.0)
         ax3.set_ylim(0.4,200.0)
 
-        ax3.set_xticks(np.unique(models['sigma']))
-        ax3.set_yticks([0.5,2.0,8.0,32.0,128.0])
+        ax3.set_xticks([0.1,0.316,1.0,3.16]) #sigma
+        ax3.set_yticks([0.5,2.0,8.0,32.0,128.0]) #m*
 
-        ax3.set_xticklabels(np.unique(models['sigma']))
-        ax3.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
+        ax3.set_xticklabels([0.1,0.316,1.0,3.16]) #sigma
+        ax3.set_yticklabels([0.5,2.0,8.0,32.0,128.0]) #m*
         
         ax3.minorticks_off()#turning off minor ticks
 
@@ -3089,15 +3189,31 @@ class ModelPlotter(FitterContainer):
         ax3.set_ylabel(r'$m_*\,(M_\odot)$')
 
         ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
+        
+        #Workaround to have the colobar span all models not only unique ones.
+        #This is important to keep consistency cbars with sed plot
+        models.sort(sorted_by)
+        sct_cb = ax3.scatter(-models['sigma'],
+                            -models['mstar'],
+                            linewidths=1,
+                            alpha=1.0,
+                            #edgecolor='k',
+                            s = markersize,
+                            c=models[sorted_by],
+                            marker=marker,
+                            norm=colors.LogNorm(),
+                            cmap=cmap,
+                            zorder=-1)
+        
 
-        cbar = fig.colorbar(sct3,label=r'$\chi^2$',shrink=0.36,pad=0.01,orientation='vertical',ax=axs)
+        cbar = fig.colorbar(sct_cb,label=r'$\chi^2$',shrink=0.36,pad=0.01,orientation='vertical',ax=axs)
         cbar.minorticks_off()
-        cbar.set_ticks(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
-                                   np.log10(triple_sigma_ms['chisq'].max()),num=5))
+        cbar.set_ticks(np.logspace(np.log10(models[sorted_by][0]),
+                                   np.log10(models[sorted_by][-1]),num=5))
         #trick to consider the adecuate number of decimals in round
-        dec = int(np.floor(np.abs(np.log10(triple_sigma_ms['chisq'].min()))))+1 #it has to be an integer
-        cbar.set_ticklabels(np.around(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
-                                                  np.log10(triple_sigma_ms['chisq'].max()),num=5),decimals=dec))
+        dec = int(np.floor(np.abs(np.log10(models[sorted_by][0]))))+1 #it has to be an integer
+        cbar.set_ticklabels(np.around(np.logspace(np.log10(models[sorted_by][0]),
+                                                  np.log10(models[sorted_by][-1]),num=5),decimals=dec))
         
         if title is not None:
             fig.suptitle(title,y=0.8)
@@ -3107,8 +3223,8 @@ class ModelPlotter(FitterContainer):
             print('Image saved in ',figname)
             
         plt.show()
-
-    def plot3d(self,models,figsize=(8,8),markersize=200,cmap='rainbow_r',title=None,figname=None):
+    
+    def plot3d(self,models,sorted_by='chisq_nonlim',figsize=(8,8),markersize=200,cmap='rainbow_r',title=None,figname=None):
         '''
         3D plot for the SED model results
         
@@ -3117,6 +3233,11 @@ class ModelPlotter(FitterContainer):
         models: `astropy.table`
             Table with the sed results.
 
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) or chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
+            
         figsize: tuple
             specify the size of the figure. Default is (8,8)
 
@@ -3139,6 +3260,9 @@ class ModelPlotter(FitterContainer):
         ----------
         plot the 3D results
         '''
+        
+        models.sort(sorted_by)
+        
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111, projection='3d')
         sct = ax.scatter(np.log10(models['mcore']),
@@ -3187,8 +3311,8 @@ class ModelPlotter(FitterContainer):
         ax.elev = 15
 
         #plotting eye-guide planes
-        x_mesh = np.arange(models['mcore'].min(),models['mcore'].max())
-        y_mesh = np.arange(models['mstar'].min(),models['mstar'].max())
+        x_mesh = np.arange(models['mcore'][0],models['mcore'][-1])
+        y_mesh = np.arange(models['mstar'][0],models['mstar'][-1])
 
         xx, yy = np.meshgrid(x_mesh,y_mesh)
 
