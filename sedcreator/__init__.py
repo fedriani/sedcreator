@@ -1,57 +1,4 @@
-'''
-Updates as of 09/02:
-
-ADDED NEW SEDCREATOR UPDATES (LOG/LINEAR ERROR OPTION, NEW BKG EST. METHOD, ETC.)
-
-optimal aperture functions:
-    -Functions have been renamed and a new one has been added. Now, "aperture_finder" is a function that takes in all of the
-     parameters of opt_ap_crowded. This function calls opt_ap_single if the length of the coord list is = 1 and calls
-     opt_ap_crowded if it is > 1. This function outputs a list containing the optimal aperture(s).
-    -Step size is now an input of both optimal aperture functions.
-    -Addded "tolerance" parameter to opt_ap_crowded (default value = 0.01) that determines the fractional change in apertures
-    between iterations at which the algorithm stops iterating and the apertures are outputted.
-    -Removed distance function defined within opt_ap_crowded and am now using the distance.euclidean function of scipy.spatial.
-    -Added a "failsafe" so that if the gradient condition is not met, the optima aperture is returned as the point where the
-    increase in flux from the last point is the smallest.
-    -Added 2 parameters to crowded function: fluxes and min_flux. These are primarily for Sam and Alex. If any source's
-    flux is below the min_flux, it is assigned the minimum aperture.
-    -Each src is now assigned ap_inner to start with instead of min_sep.
-
-get_flux and get_flux_raw:
-    -Pixels belonging to another source's aperture are now masked out of the annulus for background subtraction by
-    multiplying data by np.logical_not(mask).
-    -Now first checks if mask is an array. If it is, previous step is carried out. If it's not (meaning it's None), this step is
-    not carried out.
-
-regrid_masks:
-    -Renamed old "regrid_mask" function to "regrid" and moved it to be inside of the regrid_masks function. Added comments.
-    -Function now takes in parameters for a SINGLE source and outputs regridded masks for that source only (instead of doing all
-    of the sources in a region at once). The user now calls this function for each source separately.
-    -We now round the pixel values of the regridded masks before converting to int type and then Bool type. This means that in
-    the regridded masks, any pixels >=0.5 will NOT be masked out, whereas any pixels >0.5 WILL be masked out. This extra
-    rounding step makes the individual regridded masks look much more feasible.
-    -Renamed the "H70_img" and "H70_mask" inputs to "master_img" and "master_mask".
-
-Other added or removed functions:
-    -Included plot_aps and plot_mask functions
-    -Removed "master" function that runs all of the others
-    -Added cutout function that cuts an image down to a specified size to speed up processes.
-        -Fixed this so that original image is not changed (before, original image itself was getting cut).
-        -Adapted this to fit in SEDFluxer
-        -Size is now given in arcseconds and converted to pixels.
-
- Plotting:
-     -Fixed colorbar ticks
-
-Notes:
-    -Added documentation to remaining functions.
-    -After lots of testing, none of these changes seem to have affected the results of region G18.67 EXCEPT
-        -Masking out the pixels belonging to another source's aperture in the annulus (this affects the background and thus
-        error bars)
-        -Rounding the regridded mask pixel values before converting to integer type and then boolean type.
-
-'''
-#packages needed for the sedcreator to work
+# packages needed for the sedcreator to work
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
@@ -60,21 +7,23 @@ import copy
 import pkg_resources
 from tqdm import tqdm
 from scipy.optimize import curve_fit, minimize, Bounds
-from scipy.stats import gstd,gmean
+from scipy.stats import gstd, gmean
 from scipy.spatial import distance
 
 from matplotlib import rcParams
-rcParams['font.sans-serif'] = ['Times']
-rcParams['pdf.use14corefonts'] = True
-rcParams['font.family'] = 'serif'
-#rcParams['text.usetex'] = True
-#rcParams['ps.useafm'] = True
-rcParams['font.size'] = 12
-rcParams['mathtext.fontset'] = 'cm'
+
+rcParams["font.sans-serif"] = ["Times"]
+rcParams["pdf.use14corefonts"] = True
+rcParams["font.family"] = "serif"
+# rcParams['text.usetex'] = True
+# rcParams['ps.useafm'] = True
+rcParams["font.size"] = 12
+rcParams["mathtext.fontset"] = "cm"
 
 import astropy
 from astropy.io import fits as pyfits
 from astropy.io import ascii
+from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.table import Table, unique
 from astropy.wcs import WCS
@@ -83,8 +32,8 @@ from astropy.visualization import simple_norm
 from astropy.stats import sigma_clipped_stats
 from astropy.constants import c, m_e, m_n, m_p
 
-from photutils import aperture_photometry
-from photutils import CircularAperture, CircularAnnulus
+# from photutils import aperture_photometry
+# from photutils import CircularAperture, CircularAnnulus
 from reproject import reproject_interp, reproject_exact
 
 from astropy.nddata.utils import Cutout2D
@@ -95,23 +44,41 @@ from matplotlib.ticker import FuncFormatter
 from photutils.aperture import aperture_photometry
 from photutils.aperture import CircularAperture, CircularAnnulus
 
-#constants for SedFitter
+# constants for SedFitter
 pc2cm = u.pc.to(u.cm)
-Lsun2erg_s = u.L_sun.to(u.erg*u.s**-1)
-c_micron_s = c.to(u.micron*u.s**-1).value
-Jy2erg_s_cm2 = u.Jy.to(u.erg*u.s**-1*u.cm**-2*u.Hz**-1)
+Lsun2erg_s = u.L_sun.to(u.erg * u.s**-1)
+c_micron_s = c.to(u.micron * u.s**-1).value
+Jy2erg_s_cm2 = u.Jy.to(u.erg * u.s**-1 * u.cm**-2 * u.Hz**-1)
 
-#to track the version
-__version__ = '0.9.1'
+# to track the version
+__version__ = "2.0.0"
 
-class FluxerContainer():
-    '''
+
+class FluxerContainer:
+    """
     A class to store the results from the SedFluxer class
-    '''
-    def __init__(self,data=None,flux_bkgsub=None,flux=None,fluc_error=None,bkg=None,
-                 central_coords=None,aper_rad=None,inner_annu=None,outer_annu=None,
-                 x_source=None,y_source=None,aper_rad_pixel=None,wcs_header= None,
-                 aperture=None,annulus_aperture=None,mask=None,flux_method=None):
+    """
+
+    def __init__(
+        self,
+        data=None,
+        flux_bkgsub=None,
+        flux=None,
+        fluc_error=None,
+        bkg=None,
+        central_coords=None,
+        aper_rad=None,
+        inner_annu=None,
+        outer_annu=None,
+        x_source=None,
+        y_source=None,
+        aper_rad_pixel=None,
+        wcs_header=None,
+        aperture=None,
+        annulus_aperture=None,
+        mask=None,
+        flux_method=None,
+    ):
         self.data = data
         self.flux_bkgsub = flux_bkgsub
         self.flux = flux
@@ -132,7 +99,6 @@ class FluxerContainer():
         self.__value = None
         self.__info = None
 
-
     @property
     def value(self):
         if self.__value is None:
@@ -140,17 +106,17 @@ class FluxerContainer():
         return self.__value
 
     def get_value(self):
-        '''
+        """
         Outputs the background-subtracted flux, the flux including the background,
         the flux error, and the background estimate
 
         Returns
         -------
         flux_bkgsub,flux,fluc_error,background: numpy array
-        '''
-        
-        return self.flux_bkgsub,self.flux,self.fluc_error,self.bkg
-    
+        """
+
+        return self.flux_bkgsub, self.flux, self.fluc_error, self.bkg
+
     @property
     def info(self):
         if self.__info is None:
@@ -158,91 +124,115 @@ class FluxerContainer():
         return self.__info
 
     def get_info(self):
-        '''
+        """
         Prints the results and useful information of the image based on the header and aperture photometry
-        '''
+        """
 
-        #reading the data
-        data,header = self.data
+        # reading the data
+        data, header = self.data
         flux_method = self.flux_method
 
-        #retrieves the pixel scale or size from the header
-        if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
-        elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+        # retrieves the pixel scale or size from the header
+        if "CD1_1" in header:
+            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
+        elif "CDELT1" in header:
+            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
         else:
-            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
 
-        print('The aperture used is', round(self.aper_rad_pixel*pixel_scale,3), 'arcsec')
-        print('pixel scale is', round(pixel_scale,3), 'arcsec/pixel')
-        print('~',round(self.aper_rad_pixel,3),'pixels are used for the aperture radius')
-        if 'BUNIT' in header:
-            print('units in the image are:', header['BUNIT'])
-        elif 'FUNITS' in header:
-                print('units in the image are:', header['FUNITS'])
-        elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
-            print('units in the image are:',header['COMMENT'][17])
+        print(
+            "The aperture used is",
+            round(self.aper_rad_pixel * pixel_scale, 3),
+            "arcsec",
+        )
+        print("pixel scale is", round(pixel_scale, 3), "arcsec/pixel")
+        print(
+            "~",
+            round(self.aper_rad_pixel, 3),
+            "pixels are used for the aperture radius",
+        )
+        if "BUNIT" in header:
+            print("units in the image are:", header["BUNIT"])
+        elif "FUNITS" in header:
+            print("units in the image are:", header["FUNITS"])
+        elif (
+            "COMMENT" in header and len(header["COMMENT"]) >= 17
+        ):  # work around to print date in WISE data
+            print("units in the image are:", header["COMMENT"][17])
         else:
-            print('No BUNIT nor FUNITS key in the header')
+            print("No BUNIT nor FUNITS key in the header")
 
-        #to print the observing time
-        #I add this to know the date in case we are interested in variable sources
-        if 'MJDSTART' in header:
-            time_MJD = Time(header['MJDSTART'],format='mjd')
-            print('Observing date:',time_MJD.to_value(format='iso'))
-        elif 'DATE-OBS' in header:
-            print('Observing date:',header['DATE-OBS'])
-        elif 'COMMENT' in header and len(header['COMMENT'])>=21: #work around to print date in WISE data
-            print('Observing date:',header['COMMENT'][21])
-        elif 'MIDOBS' in header: #work around to print date in WISE data
-            print('Observing date:',header['MIDOBS'])
+        # to print the observing time
+        # I add this to know the date in case we are interested in variable sources
+        if "MJDSTART" in header:
+            time_MJD = Time(header["MJDSTART"], format="mjd")
+            print("Observing date:", time_MJD.to_value(format="iso"))
+        elif "DATE-OBS" in header:
+            print("Observing date:", header["DATE-OBS"])
+        elif (
+            "COMMENT" in header and len(header["COMMENT"]) >= 21
+        ):  # work around to print date in WISE data
+            print("Observing date:", header["COMMENT"][21])
+        elif "MIDOBS" in header:  # work around to print date in WISE data
+            print("Observing date:", header["MIDOBS"])
         else:
-            print('Observing date:\nNo information found in this header')
-        #to print the wavelength
-        if 'WAVELEN' in header:
-            print('Wavelength:',header['WAVELEN'])
-        elif 'WAVELNTH' in header:
-            print('Wavelength:',header['WAVELNTH'])
-        elif 'FILTER' in header:
-            print('Wavelength:',header['FILTER'])
-        elif 'SURVEY' in header:
-            print('Wavelength:',header['SURVEY'])
-        #TODO: make sure the below works for other images
-        #workaround to also print wavelengths in Spitzer IRAC cases
-        elif 'CHNLNUM' in header:
-            if header['CHNLNUM']==1:
-                print('Wavelength:',3.6)
-            if header['CHNLNUM']==2:
-                print('Wavelength:',4.5)
-            if header['CHNLNUM']==3:
-                print('Wavelength:',5.8)
-            if header['CHNLNUM']==4:
-                print('Wavelength:',8.0)
+            print("Observing date:\nNo information found in this header")
+        # to print the wavelength
+        if "WAVELEN" in header:
+            print("Wavelength:", header["WAVELEN"])
+        elif "WAVELNTH" in header:
+            print("Wavelength:", header["WAVELNTH"])
+        elif "FILTER" in header:
+            print("Wavelength:", header["FILTER"])
+        elif "SURVEY" in header:
+            print("Wavelength:", header["SURVEY"])
+        # TODO: make sure the below works for other images
+        # workaround to also print wavelengths in Spitzer IRAC cases
+        elif "CHNLNUM" in header:
+            if header["CHNLNUM"] == 1:
+                print("Wavelength:", 3.6)
+            if header["CHNLNUM"] == 2:
+                print("Wavelength:", 4.5)
+            if header["CHNLNUM"] == 3:
+                print("Wavelength:", 5.8)
+            if header["CHNLNUM"] == 4:
+                print("Wavelength:", 8.0)
         else:
-            print('Wavelength:\nNo information found in this header')
+            print("Wavelength:\nNo information found in this header")
 
-        if flux_method=='get_flux':
-            print('############################')
-            print('Flux bkg sub',self.flux_bkgsub, 'Jy')
-            print('Flux        ',self.flux, 'Jy')
-            print('Fluc error  ',self.fluc_error, 'Jy')
-            print('Background  ',self.flux-self.flux_bkgsub, 'Jy')
-            print('############################')
+        if flux_method == "get_flux":
+            print("############################")
+            print("Flux bkg sub", self.flux_bkgsub, "Jy")
+            print("Flux        ", self.flux, "Jy")
+            print("Fluc error  ", self.fluc_error, "Jy")
+            print("Background  ", self.flux - self.flux_bkgsub, "Jy")
+            print("############################")
 
-        elif flux_method=='get_raw_flux':
-            print('############################')
-            print('Flux bkg sub',self.flux_bkgsub, 'unitless')
-            print('Flux        ',self.flux, 'unitless')
-            print('Fluc error  ',self.fluc_error, 'unitless')
-            print('Background  ',self.flux-self.flux_bkgsub, 'unitless')
-            print('############################')
-            print('Please, perform your own units transformation')
+        elif flux_method == "get_raw_flux":
+            print("############################")
+            print("Flux bkg sub", self.flux_bkgsub, "unitless")
+            print("Flux        ", self.flux, "unitless")
+            print("Fluc error  ", self.fluc_error, "unitless")
+            print("Background  ", self.flux - self.flux_bkgsub, "unitless")
+            print("############################")
+            print("Please, perform your own units transformation")
         else:
-            print('')
+            print("")
 
-    def plot(self,figsize=(6,4),cmap='gray',percent=100.0,stretch='log',colorbar=True,aperture_color='black',annulus_color='red',plot_mask=False,title=None,figname=None):
-        '''
+    def plot(
+        self,
+        figsize=(6, 4),
+        cmap="gray",
+        percent=100.0,
+        stretch="log",
+        colorbar=True,
+        aperture_color="black",
+        annulus_color="red",
+        plot_mask=False,
+        title=None,
+        figname=None,
+    ):
+        """
         Plots the used image together with the aperture used for the flux
         and the annulus for the background subtraction.
 
@@ -280,88 +270,119 @@ class FluxerContainer():
                     and there is no attempt to make the extension. Default is None.
                     Note that one can choose the format of the figure by changing the extension,
                     e.g., figure.pdf would generate the figure in PDF format.
-        '''
+        """
 
-        #reading the data
-        data,header = self.data
+        # reading the data
+        data, header = self.data
         mask = self.mask
 
         plt.figure(figsize=figsize)
         plt.subplot(projection=self.wcs_header)
-        #This is to get around no good stretch for SOFIA images
-        if 'OBSERVAT' in header:
-            if 'SOFIA' in header['OBSERVAT']:
-                data_for_norm = data
-            else:
-                data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
-                                     int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
-        elif 'TELESCOP' in header:
-            if 'SOFIA 2.5m' in header['TELESCOP']:
-                data_for_norm = data
-            else:
-                data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
-                                     int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
-        else:
-            data_for_norm = data[int(self.y_source-5.0*self.aper_rad_pixel):int(self.y_source+5.0*self.aper_rad_pixel),
-                                 int(self.x_source-5.0*self.aper_rad_pixel):int(self.x_source+5.0*self.aper_rad_pixel)]
 
-        norm = simple_norm(data_for_norm[data_for_norm>0], stretch=stretch, percent=percent)
-        plt.imshow(data, cmap=cmap, origin='lower', norm=norm)
-        #plt.plot(self.x_source,self.y_source,'rx')
-        plt.xlim(self.x_source-5.0*self.aper_rad_pixel,self.x_source+5.0*self.aper_rad_pixel)
-        plt.ylim(self.y_source-5.0*self.aper_rad_pixel,self.y_source+5.0*self.aper_rad_pixel)
-        #self.aperture.plot(color=aperture_color)
-        #self.annulus_aperture.plot(color=annulus_color,ls='--')
-        #in case we are dealing with galactic coordinates
-        if 'GLON' in self.wcs_header.axis_type_names or 'glon' in self.wcs_header.axis_type_names:
-            plt.xlabel('GLON')
-            plt.ylabel('GLAT')
+        img_shape = np.shape(data)
+        y_start = np.max([int(self.y_source - 5.0 * self.aper_rad_pixel), 0])
+        y_stop = np.min([int(self.y_source + 5.0 * self.aper_rad_pixel), img_shape[0]])
+        x_start = np.max([int(self.x_source - 5.0 * self.aper_rad_pixel), 0])
+        x_stop = np.min([int(self.x_source + 5.0 * self.aper_rad_pixel), img_shape[1]])
+
+        # This is to get around no good stretch for SOFIA images
+        if "OBSERVAT" in header:
+            if "SOFIA" in header["OBSERVAT"]:
+                data_for_norm = data
+            else:
+                # Make sure it doesn't run past the edge of the image
+                data_for_norm = data[y_start:y_stop, x_start:x_stop]
+        elif "TELESCOP" in header:
+            if "SOFIA 2.5m" in header["TELESCOP"]:
+                data_for_norm = data
+            else:
+                data_for_norm = data[y_start:y_stop, x_start:x_stop]
         else:
-            plt.xlabel('RA (J2000)')
-            plt.ylabel('Dec (J2000)')
+            data_for_norm = data[y_start:y_stop, x_start:x_stop]
+
+        norm = simple_norm(
+            data_for_norm[data_for_norm > 0], stretch=stretch, percent=percent
+        )
+        plt.imshow(data, cmap=cmap, origin="lower", norm=norm)
+        # plt.plot(self.x_source,self.y_source,'rx')
+        plt.xlim(
+            self.x_source - 5.0 * self.aper_rad_pixel,
+            self.x_source + 5.0 * self.aper_rad_pixel,
+        )
+        plt.ylim(
+            self.y_source - 5.0 * self.aper_rad_pixel,
+            self.y_source + 5.0 * self.aper_rad_pixel,
+        )
+        self.aperture.plot(color=aperture_color)
+        self.annulus_aperture.plot(color=annulus_color, ls="--")
+
+        # in case we are dealing with galactic coordinates
+        if (
+            "GLON" in self.wcs_header.axis_type_names
+            or "glon" in self.wcs_header.axis_type_names
+        ):
+            plt.xlabel("GLON")
+            plt.ylabel("GLAT")
+        else:
+            plt.xlabel("RA (J2000)")
+            plt.ylabel("Dec (J2000)")
 
         if colorbar:
-            if 'BUNIT' in header:
-                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
-            elif 'FUNITS' in header:
-                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['FUNITS']), pad=0.01)
-            elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
-                cbar = plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
+            if "BUNIT" in header:
+                cbar = plt.colorbar(
+                    label="PixelUnits: {0}".format(header["BUNIT"]), pad=0.01
+                )
+            elif "FUNITS" in header:
+                cbar = plt.colorbar(
+                    label="PixelUnits: {0}".format(header["FUNITS"]), pad=0.01
+                )
+            elif (
+                "COMMENT" in header and len(header["COMMENT"]) >= 17
+            ):  # work around to print date in WISE data
+                cbar = plt.colorbar(label="{0}".format(header["COMMENT"][17]), pad=0.01)
             else:
-                cbar = plt.colorbar(label='PixelUnits: check header', pad=0.01)
+                cbar = plt.colorbar(label="PixelUnits: check header", pad=0.01)
 
             cbar.minorticks_off()
-            cbar.set_ticks(np.logspace(np.log10(norm.vmin),np.log10(norm.vmax),num=5))
-            #trick to consider the adecuate number of decimals in round
-            dec = int(np.floor(np.abs(np.log10(norm.vmin))))+1 #it has to be an integer
-            cbar.set_ticklabels(np.around(np.logspace(np.log10(norm.vmin),np.log10(norm.vmax),num=5),decimals=dec))
-#             cbar.ax.set_yticklabels(["{:.2f}".format(i) for i in cbar_ticks])
+            cbar.set_ticks(np.logspace(np.log10(norm.vmin), np.log10(norm.vmax), num=5))
+            # trick to consider the adecuate number of decimals in round
+            dec = (
+                int(np.floor(np.abs(np.log10(norm.vmin)))) + 1
+            )  # it has to be an integer
+            cbar.set_ticklabels(
+                np.around(
+                    np.logspace(np.log10(norm.vmin), np.log10(norm.vmax), num=5),
+                    decimals=dec,
+                )
+            )
+        #             cbar.ax.set_yticklabels(["{:.2f}".format(i) for i in cbar_ticks])
 
         if title is not None:
             plt.title(title)
 
-
         if plot_mask and mask is not None:
-            mask_to_plot = np.array(mask,dtype=int)
+            mask_to_plot = np.array(mask, dtype=int)
             mask_cmap = plt.cm.Greys_r
-            mask_cmap.set_bad(color='red',alpha=0.3)
-            plt.imshow(mask,vmin=0,vmax=1,cmap=mask_cmap,alpha=0.5)
+            mask_cmap.set_bad(color="red", alpha=0.3)
+            plt.imshow(mask, vmin=0, vmax=1, cmap=mask_cmap, alpha=0.5)
 
         if figname is not None:
-            plt.savefig(figname,dpi=300,bbox_inches='tight')
-            print('Image saved in ',figname)
+            plt.savefig(figname, dpi=300, bbox_inches="tight")
+            print("Image saved in ", figname)
         plt.show()
 
+
 class SedFluxer:
-    '''
+    """
     A class used to measure flux
 
     Attributes
     ----------
     get_data: function
         Get the data to measure flux
-    '''
-    def __init__(self,image):
+    """
+
+    def __init__(self, image):
         self.image = image
         self.data = self.get_data()
 
@@ -369,25 +390,25 @@ class SedFluxer:
         try:
             data = self.image.data
             header = self.image.header
-            #this is to deal with SOFIA data that has 3 dimensions in shape
-            if len(np.shape(self.image.data))==3:
+            # this is to deal with SOFIA data that has 3 dimensions in shape
+            if len(np.shape(self.image.data)) == 3:
                 data = self.image.data[0]
-            #this is to deal with ALMA and VLA data that has 4 dimensions in shape
-            if len(np.shape(self.image.data))==4:
+            # this is to deal with ALMA and VLA data that has 4 dimensions in shape
+            if len(np.shape(self.image.data)) == 4:
                 data = self.image.data[0][0]
         except:
             data = self.image[0][0].data
             header = self.image[0][0].header
-            #this is to deal with SOFIA data that has 3 dimensions in shape
-            if len(np.shape(self.image[0][0].data))==3:
+            # this is to deal with SOFIA data that has 3 dimensions in shape
+            if len(np.shape(self.image[0][0].data)) == 3:
                 data = self.image[0][0].data[0]
-            #this is to deal with ALMA and VLA data that has 4 dimensions in shape
-            if len(np.shape(self.image[0][0].data))==4:
+            # this is to deal with ALMA and VLA data that has 4 dimensions in shape
+            if len(np.shape(self.image[0][0].data)) == 4:
                 data = self.image[0][0].data[0][0]
-        return(data,header)
+        return (data, header)
 
     def cutout(self, central_coords, size_arcsec):
-        '''
+        """
         based on: https://docs.astropy.org/en/stable/nddata/utils.html
 
         Cuts an image to a specified size and changes the header accordingly.
@@ -402,17 +423,19 @@ class SedFluxer:
         ---------
         hdu: FITS HDU
             HDU containing the cutout image and adapted header.
-        '''
+        """
         # Load the image and the WCS
         data, header = self.data
         wcs = WCS(header)
 
-        if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
-        elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+        if "CD1_1" in header:
+            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
+        elif "CDELT1" in header:
+            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
+        else:
+            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
 
-        size_pixels = size_arcsec/pixel_scale
+        size_pixels = size_arcsec / pixel_scale
 
         # Make the cutout, including the WCS
         cutout = Cutout2D(data, position=central_coords, size=size_pixels, wcs=wcs)
@@ -426,10 +449,8 @@ class SedFluxer:
 
         return hdu
 
-        
-        
-    def get_flux(self,central_coords,aper_rad,inner_annu,outer_annu,mask=None):
-        '''
+    def get_flux(self, central_coords, aper_rad, inner_annu, outer_annu, mask=None):
+        """
         Performs circular aperture photometry for a given image, specifying the central coordinates and
         the aperture radius. It returns the background subtracted flux and the flux including the background in units of Jy.
         Considering the header of the image, the function makes the units transformations.
@@ -466,298 +487,481 @@ class SedFluxer:
 
         array: float,float
             with flux with background subtracted and flux including background in units of Jy
-        '''
+        """
 
-        data,header = self.data
-
+        data, header = self.data
 
         wcs_header = WCS(header).celestial
-        x_source,y_source = wcs_header.world_to_pixel(central_coords)
+        x_source, y_source = wcs_header.world_to_pixel(central_coords)
 
-        #retrieves the pixel scale or size from the header
-        if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
-        elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+        data_shape = np.shape(data)
+
+        # If source isn't in the image, return None
+        if (
+            (x_source < 0)
+            or (x_source > data_shape[1] - 1)
+            or (y_source < 0)
+            or (y_source > data_shape[0] - 1)
+        ):
+            print("WARNING: Source not in image. No values will be returned.")
+            return None
+
+        # retrieves the pixel scale or size from the header
+        if "CD1_1" in header:
+            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
+        elif "CDELT1" in header:
+            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
         else:
-            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
 
-        #defines the aperture size in pixels
-        aper_rad_pixel = aper_rad/pixel_scale
-        inner_annu_pixel = inner_annu/pixel_scale
-        outer_annu_pixel = outer_annu/pixel_scale
-        aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
-        annulus_aperture = CircularAnnulus([[x_source,y_source]],
-                                           r_in=inner_annu_pixel, r_out=outer_annu_pixel)
+        # defines the aperture size in pixels
+        aper_rad_pixel = aper_rad / pixel_scale
+        inner_annu_pixel = inner_annu / pixel_scale
+        outer_annu_pixel = outer_annu / pixel_scale
+        aperture = CircularAperture([[x_source, y_source]], r=aper_rad_pixel)
+        annulus_aperture = CircularAnnulus(
+            [[x_source, y_source]], r_in=inner_annu_pixel, r_out=outer_annu_pixel
+        )
 
-        aperture_area = aperture.area #main area for corrective factor in fluctuation estimation when masked
+        aperture_area = (
+            aperture.area
+        )  # main area for corrective factor in fluctuation estimation when masked
 
-        #here is the main code for the aperture photometry
-        #--> START of the aperture photometry block
-        annulus_masks = annulus_aperture.to_mask(method='center')
+        # here is the main code for the aperture photometry
+        # --> START of the aperture photometry block
+        annulus_masks = annulus_aperture.to_mask(method="center")
 
-        error = 0.1*data
+        error = 0.1 * data
         bkg_median = []
         for annu_mask in annulus_masks:
             if type(mask) is np.ndarray:
-                annulus_data = annu_mask.multiply(data*np.logical_not(mask))
-#                 plt.imshow(annulus_data, origin="lower")
-#                 plt.show()
+                annulus_data = annu_mask.multiply(data * np.logical_not(mask))
+                masked_mask = annu_mask.multiply(np.logical_not(mask))
+
             else:
                 annulus_data = annu_mask.multiply(data)
-            annulus_data_1d = annulus_data[annu_mask.data > 0]
+
+            if mask is not None:
+                annulus_data_1d = annulus_data[
+                    np.where((annu_mask.data > 0) & (masked_mask > 0))
+                ]
+            else:
+                annulus_data_1d = annulus_data[np.where((annu_mask.data > 0))]
+
             _, median_sigclip, _ = sigma_clipped_stats(annulus_data_1d)
             bkg_median.append(median_sigclip)
+
         bkg_median = np.array(bkg_median)
-        ap_phot = aperture_photometry(data, aperture,error=error,mask=mask) #circular aperture sum
-        ap_phot['annulus_median'] = bkg_median
-        #print(ap_phot.keys())
-        ap_phot['aper_bkg'] = bkg_median * aperture.area_overlap(data, mask=mask, method='exact', subpixels=5) #consider a median value for the background subtraction
-        ap_phot['aper_sum_bkgsub'] = ap_phot['aperture_sum'] - ap_phot['aper_bkg'] #subtracting the background
+        ap_phot = aperture_photometry(
+            data, aperture, error=error, mask=mask
+        )  # circular aperture sum
+        ap_phot["annulus_median"] = bkg_median
+        ap_phot["aper_bkg"] = bkg_median * aperture.area_overlap(
+            data, mask=mask, method="exact", subpixels=5
+        )  # consider a median value for the background subtraction
+        ap_phot["aper_sum_bkgsub"] = (
+            ap_phot["aperture_sum"] - ap_phot["aper_bkg"]
+        )  # subtracting the background
+        # --> END of the aperture photometry block
 
-        #--> END of the aperture photometry block
-
-        #Estimating the error via background fluctuations in the annular background
-        #with patches with equal area to that of the aperture.
-        angles = np.arange(0.0,360.0,30.0)
-        aliasing = np.arange(0.0,90.0,15.0)
+        # Estimating the error via background fluctuations in the annular background
+        # with patches with equal area to that of the aperture.
+        angles = np.arange(0.0, 360.0, 30.0)
+        aliasing = np.arange(0.0, 90.0, 15.0)
 
         STD = []
         for i in aliasing:
             bkg_pos = []
             for alpha in angles:
-                alpha_aper = np.deg2rad(alpha+i)
-                bkg_pos.append((x_source+3.0/2.0*aper_rad_pixel*np.sin(alpha_aper),
-                                y_source+3.0/2.0*aper_rad_pixel*np.cos(alpha_aper)))
+                alpha_aper = np.deg2rad(alpha + i)
+                bkg_pos.append(
+                    (
+                        x_source + 3.0 / 2.0 * aper_rad_pixel * np.sin(alpha_aper),
+                        y_source + 3.0 / 2.0 * aper_rad_pixel * np.cos(alpha_aper),
+                    )
+                )
 
-            bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel/2.0)
-            bkg_aper_areas = bkg_aper.area_overlap(data=data,mask=mask)
+            bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel / 2.0)
+            bkg_aper_areas = bkg_aper.area_overlap(data=data, mask=mask)
+
             bkg_aper_total_area = bkg_aper.area
-            ap_total_frac = np.nansum(bkg_aper_areas)/(bkg_aper_total_area*len(bkg_pos))
+            ap_total_frac = np.nansum(bkg_aper_areas) / (
+                bkg_aper_total_area * len(bkg_pos)
+            )
 
-            
             if ap_total_frac < 0.5:
                 break
-                
+
             else:
-                bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
+                bkg_phot = aperture_photometry(data, bkg_aper, mask=mask)
 
-                #getting correcting factor when part of the fluctuation areas are masked
-                #here we assumed that area=nan is 0 and that the flux obtained in the masked
-                #areas is directly proportional to the total flux
-                area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
-                area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
-                area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
+                # getting correcting factor when part of the fluctuation areas are masked
+                # here we assumed that area=nan is 0 and that the flux obtained in the masked
+                # areas is directly proportional to the total flux
+                area_corr_set1 = np.nansum(bkg_aper_areas[0:4]) / aperture_area
+                area_corr_set2 = np.nansum(bkg_aper_areas[4:8]) / aperture_area
+                area_corr_set3 = np.nansum(bkg_aper_areas[8:12]) / aperture_area
 
-                aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
-                aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
-                aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
+                # to get rid of divide by zero warning
+                if area_corr_set1 > 0:
+                    aper_set1 = bkg_phot["aperture_sum"][0:4].sum() / area_corr_set1
+                else:
+                    aper_set1 = 0
+                if area_corr_set2 > 0:
+                    aper_set2 = bkg_phot["aperture_sum"][4:8].sum() / area_corr_set2
+                else:
+                    aper_set2 = 0
+                if area_corr_set3 > 0:
+                    aper_set3 = bkg_phot["aperture_sum"][8:12].sum() / area_corr_set3
+                else:
+                    aper_set3 = 0
 
-                std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
-                STD.append(std)
-       
-        if ap_total_frac < 0.5:
-            fluc_error = ap_phot['aper_bkg'].data[0]
+                all_set_areas = [area_corr_set1, area_corr_set2, area_corr_set3]
+                all_sets = [aper_set1, aper_set2, aper_set3]
+                count_sets = []
+
+                for i in range(len(all_set_areas)):
+                    if all_set_areas[i] >= 0.2:
+                        count_sets.append(all_sets[i])
+
+                if len(count_sets) < 2:
+                    break
+                else:
+                    std = np.nanstd(count_sets)  # ignoring nans
+                    STD.append(std)
+
+        if ap_total_frac < 0.5 or len(count_sets) < 2:
+            print(
+                f"WARNING: More than 50% of annulus for source at (RA={central_coords.ra:.2f}, Dec={central_coords.dec:.2f}) is masked. The bkg error estimation method will be used by default."
+            )
+            fluc_error = ap_phot["aper_bkg"].data[0]
         else:
             fluc_error = np.mean(STD)
 
-        
-        #This block is to deal with WISE DN units
-        #The first if else is to deal with both WISE images the one downloaded from Skyview and from WISE archive
-        if ('TELESCOP' in header) & ('BAND' in header):
-            if header['TELESCOP']=='WISE':
-                if ((header['TELESCOP']=='WISE') & (header['BAND']==1)):
-                    M_0_inst = 20.752 #mag for W1
-                    AC = 0.222 #mag for W1
-                    F_nu_0 = 309.540 #Jy
-                elif ((header['TELESCOP']=='WISE') & (header['BAND']==2)):
-                    M_0_inst = 19.596 #mag for W2
-                    AC = 0.280 #mag for W2
-                    F_nu_0 = 171.787 #Jy
-                elif ((header['TELESCOP']=='WISE') & (header['BAND']==3)):
-                    M_0_inst = 17.800 #mag for W3
-                    AC = 0.665 #mag for W3
-                    F_nu_0 = 31.674 #Jy
-                elif ((header['TELESCOP']=='WISE') & (header['BAND']==4)):
-                    M_0_inst = 12.945 #mag for W4
-                    AC = 0.616 #mag for W4
-                    F_nu_0 = 8.363 #Jy
+        # This block is to deal with WISE DN units
+        # The first if else is to deal with both WISE images the one downloaded from Skyview and from WISE archive
+        if ("TELESCOP" in header) & ("BAND" in header):
+            if header["TELESCOP"] == "WISE":
+                if (header["TELESCOP"] == "WISE") & (header["BAND"] == 1):
+                    M_0_inst = 20.752  # mag for W1
+                    AC = 0.222  # mag for W1
+                    F_nu_0 = 309.540  # Jy
+                elif (header["TELESCOP"] == "WISE") & (header["BAND"] == 2):
+                    M_0_inst = 19.596  # mag for W2
+                    AC = 0.280  # mag for W2
+                    F_nu_0 = 171.787  # Jy
+                elif (header["TELESCOP"] == "WISE") & (header["BAND"] == 3):
+                    M_0_inst = 17.800  # mag for W3
+                    AC = 0.665  # mag for W3
+                    F_nu_0 = 31.674  # Jy
+                elif (header["TELESCOP"] == "WISE") & (header["BAND"] == 4):
+                    M_0_inst = 12.945  # mag for W4
+                    AC = 0.616  # mag for W4
+                    F_nu_0 = 8.363  # Jy
 
-                #magnitude transformation for WISE depending on the above constants (band dependent)
-                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
-                Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
-                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
-                Mcal_error = M_0_inst-2.5*np.log10(fluc_error)-AC
+                # magnitude transformation for WISE depending on the above constants (band dependent)
+                Mcal_bkg = M_0_inst - 2.5 * np.log10(ap_phot["aper_sum_bkgsub"]) - AC
+                Mcal = M_0_inst - 2.5 * np.log10(ap_phot["aperture_sum"]) - AC
+                Mcal_bkg = M_0_inst - 2.5 * np.log10(ap_phot["aper_bkg"]) - AC
+                Mcal_error = M_0_inst - 2.5 * np.log10(fluc_error) - AC
 
-                #flux conversion for WISE
-                flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
-                #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
-                flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
-                bkg = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
-                fluc_error = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
+                # flux conversion for WISE
+                flux_bkgsub = F_nu_0 * 10.0 ** (-Mcal_bkg.data[0] / 2.5)  # Jy
+                # DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
+                flux = F_nu_0 * 10.0 ** (-Mcal.data[0] / 2.5)  # Jy
+                bkg = F_nu_0 * 10.0 ** (-Mcal_bkg.data[0] / 2.5)  # Jy
+                fluc_error = F_nu_0 * 10.0 ** (-Mcal_error / 2.5)  # Jy
 
-            elif 'SOFIA 2.5m' in header['TELESCOP']:#To get around HAWC+ data
-                #TODO: careful here, I am not sure it will work 100%.
-                #TEMPORARY FIX to give some value
-                if 'BUNIT' in header:
-                    if 'Jy/pix' in header['BUNIT']:
-                        if 'mJy/pix' in header['BUNIT']:
-                            unit_factor_Jy = 0.001 #from mJy to Jy
+            elif "SOFIA 2.5m" in header["TELESCOP"]:  # To get around HAWC+ data
+                # TEMPORARY FIX to give some value
+                if "BUNIT" in header:
+                    if "Jy/pix" in header["BUNIT"]:
+                        if "mJy/pix" in header["BUNIT"]:
+                            unit_factor_Jy = 0.001  # from mJy to Jy
                         else:
-                            unit_factor_Jy = 1.0 #leave it in Jy
-                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                        error_flux = unit_factor_Jy*fluc_error #Jy
-                    elif 'Jy'==header['BUNIT']:
-                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                        flux = ap_phot['aperture_sum'].data[0] #Jy
-                        bkg = ap_phot['aper_bkg'].data[0] #Jy
-                        fluc_error = fluc_error #Jy
+                            unit_factor_Jy = 1.0  # leave it in Jy
+                        flux_bkgsub = (
+                            unit_factor_Jy * ap_phot["aper_sum_bkgsub"].data[0]
+                        )  # Jy
+                        flux = unit_factor_Jy * ap_phot["aperture_sum"].data[0]  # Jy
+                        error_flux = unit_factor_Jy * fluc_error  # Jy
+                    elif "Jy" == header["BUNIT"]:
+                        flux_bkgsub = ap_phot["aper_sum_bkgsub"].data[0]  # Jy
+                        flux = ap_phot["aperture_sum"].data[0]  # Jy
+                        bkg = ap_phot["aper_bkg"].data[0]  # Jy
+                        fluc_error = fluc_error  # Jy
                     else:
-                        raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
-                elif 'FUNITS' in header:
-                    if 'Jy/pix' in header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
-                        if 'mJy/pix' in header['FUNITS']:
-                            unit_factor_Jy = 0.001 #from mJy to Jy
+                        raise Exception(
+                            "BUNIT (",
+                            header["BUNIT"],
+                            ") found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation",
+                        )
+                elif "FUNITS" in header:
+                    if (
+                        "Jy/pix" in header["FUNITS"]
+                    ):  # This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                        if "mJy/pix" in header["FUNITS"]:
+                            unit_factor_Jy = 0.001  # from mJy to Jy
                         else:
-                            unit_factor_Jy = 1.0 #leave it in Jy
-                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0] #Jy
-                        fluc_error = unit_factor_Jy*fluc_error #Jy
+                            unit_factor_Jy = 1.0  # leave it in Jy
+                        flux_bkgsub = (
+                            unit_factor_Jy * ap_phot["aper_sum_bkgsub"].data[0]
+                        )  # Jy
+                        flux = unit_factor_Jy * ap_phot["aperture_sum"].data[0]  # Jy
+                        bkg = unit_factor_Jy * ap_phot["aper_bkg"].data[0]  # Jy
+                        fluc_error = unit_factor_Jy * fluc_error  # Jy
                 else:
-                    raise Exception('Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation')
+                    raise Exception(
+                        "Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation"
+                    )
 
             else:
-                raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
+                raise Exception(
+                    "No valid information found in the header, use get_raw_flux() function and perform own units transformation"
+                )
 
+        elif "SURVEY" in header:  # This is when WISE is considered
+            if (
+                header["SURVEY"] == "WISE 3.4 micron allWISE release"
+                or header["SURVEY"] == "WISE 4.6 micron allWISE release"
+                or header["SURVEY"] == "WISE 12 micron allWISE release"
+                or header["SURVEY"] == "WISE 22 micron allWISE release"
+            ):
+                if header["SURVEY"] == "WISE 3.4 micron allWISE release":
+                    M_0_inst = 20.752  # mag for W1
+                    AC = 0.222  # mag for W1
+                    F_nu_0 = 309.540  # Jy
+                elif header["SURVEY"] == "WISE 4.6 micron allWISE release":
+                    M_0_inst = 19.596  # mag for W2
+                    AC = 0.280  # mag for W2
+                    F_nu_0 = 171.787  # Jy
+                elif header["SURVEY"] == "WISE 12 micron allWISE release":
+                    M_0_inst = 17.800  # mag for W3
+                    AC = 0.665  # mag for W3
+                    F_nu_0 = 31.674  # Jy
+                elif header["SURVEY"] == "WISE 22 micron allWISE release":
+                    M_0_inst = 12.945  # mag for W4
+                    AC = 0.616  # mag for W4
+                    F_nu_0 = 8.363  # Jy
+                # magnitude transformation for WISE depending on the above constants (band dependent)
+                Mcal_bkg = M_0_inst - 2.5 * np.log10(ap_phot["aper_sum_bkgsub"]) - AC
+                Mcal = M_0_inst - 2.5 * np.log10(ap_phot["aperture_sum"]) - AC
+                Mcal_bkg = M_0_inst - 2.5 * np.log10(ap_phot["aper_bkg"]) - AC
+                Mcal_error = M_0_inst - 2.5 * np.log10(fluc_error) - AC
 
+                # flux conversion for WISE
+                flux_bkgsub = F_nu_0 * 10.0 ** (-Mcal_bkg.data[0] / 2.5)  # Jy
+                # DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
+                flux = F_nu_0 * 10.0 ** (-Mcal.data[0] / 2.5)  # Jy
+                bkg = F_nu_0 * 10.0 ** (-Mcal_bkg.data[0] / 2.5)  # Jy
+                fluc_error = F_nu_0 * 10.0 ** (-Mcal_error / 2.5)  # Jy
 
-        elif 'SURVEY' in header:#This is when WISE is considered
-            if header['SURVEY']=='WISE 3.4 micron allWISE release' or\
-            header['SURVEY']=='WISE 4.6 micron allWISE release' or\
-            header['SURVEY']=='WISE 12 micron allWISE release' or\
-                header['SURVEY']=='WISE 22 micron allWISE release':
-                if header['SURVEY']=='WISE 3.4 micron allWISE release':
-                    M_0_inst = 20.752 #mag for W1
-                    AC = 0.222 #mag for W1
-                    F_nu_0 = 309.540 #Jy
-                elif header['SURVEY']=='WISE 4.6 micron allWISE release':
-                    M_0_inst = 19.596 #mag for W2
-                    AC = 0.280 #mag for W2
-                    F_nu_0 = 171.787 #Jy
-                elif header['SURVEY']=='WISE 12 micron allWISE release':
-                    M_0_inst = 17.800 #mag for W3
-                    AC = 0.665 #mag for W3
-                    F_nu_0 = 31.674 #Jy
-                elif header['SURVEY']=='WISE 22 micron allWISE release':
-                    M_0_inst = 12.945 #mag for W4
-                    AC = 0.616 #mag for W4
-                    F_nu_0 = 8.363 #Jy
-                #magnitude transformation for WISE depending on the above constants (band dependent)
-                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_sum_bkgsub'])-AC
-                Mcal = M_0_inst-2.5*np.log10(ap_phot['aperture_sum'])-AC
-                Mcal_bkg = M_0_inst-2.5*np.log10(ap_phot['aper_bkg'])-AC
-                Mcal_error = M_0_inst-2.5*np.log10(fluc_error)-AC
-
-                #flux conversion for WISE
-                flux_bkgsub = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
-                #DISCLAMER:Flux without bkgsub does not really makes sense, only here for completeness
-                flux = F_nu_0*10.0**(-Mcal.data[0]/2.5) #Jy
-                bkg = F_nu_0*10.0**(-Mcal_bkg.data[0]/2.5) #Jy
-                fluc_error = F_nu_0*10.0**(-Mcal_error/2.5) #Jy
-                    
             else:
-                raise Exception('No valid information found in the header, use get_raw_flux() function and perform own units transformation')
+                raise Exception(
+                    "No valid information found in the header, use get_raw_flux() function and perform own units transformation"
+                )
 
         else:
-            # Mengyao's conversion from MJy/sr to Jy/pixel
-            if 'BUNIT' in header:
-                if 'MJy/sr' in header['BUNIT'] or 'MJY/SR' in header['BUNIT']: #mainly for Herschel and some Spitzer data (and IRAS)
-                    if 'CD1_1' in header:
-                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                        flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                        bkg = ap_phot['aper_bkg'].data[0]*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                        fluc_error = fluc_error*304.6*(np.absolute(header['CD1_1']))**2 #Jy
-                    elif 'CDELT1' in header:
-                        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                        flux = ap_phot['aperture_sum'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                        bkg = ap_phot['aper_bkg'].data[0]*304.6*(np.absolute(header['CDELT1']))**2 #Jy
-                        fluc_error = fluc_error*304.6*(np.absolute(header['CDELT1']))**2 #Jy
+            # Conversion from MJy/sr to Jy/pixel
+            if "BUNIT" in header:
+                if (
+                    "MJy/sr" in header["BUNIT"] or "MJY/SR" in header["BUNIT"]
+                ):  # mainly for Herschel and some Spitzer data (and IRAS)
+                    if "CD1_1" in header:
+                        flux_bkgsub = (
+                            ap_phot["aper_sum_bkgsub"].data[0]
+                            * 304.6
+                            * (np.absolute(header["CD1_1"])) ** 2
+                        )  # Jy
+                        flux = (
+                            ap_phot["aperture_sum"].data[0]
+                            * 304.6
+                            * (np.absolute(header["CD1_1"])) ** 2
+                        )  # Jy
+                        bkg = (
+                            ap_phot["aper_bkg"].data[0]
+                            * 304.6
+                            * (np.absolute(header["CD1_1"])) ** 2
+                        )  # Jy
+                        fluc_error = (
+                            fluc_error * 304.6 * (np.absolute(header["CD1_1"])) ** 2
+                        )  # Jy
+                    elif "CDELT1" in header:
+                        flux_bkgsub = (
+                            ap_phot["aper_sum_bkgsub"].data[0]
+                            * 304.6
+                            * (np.absolute(header["CDELT1"])) ** 2
+                        )  # Jy
+                        flux = (
+                            ap_phot["aperture_sum"].data[0]
+                            * 304.6
+                            * (np.absolute(header["CDELT1"])) ** 2
+                        )  # Jy
+                        bkg = (
+                            ap_phot["aper_bkg"].data[0]
+                            * 304.6
+                            * (np.absolute(header["CDELT1"])) ** 2
+                        )  # Jy
+                        fluc_error = (
+                            fluc_error * 304.6 * (np.absolute(header["CDELT1"])) ** 2
+                        )  # Jy
                     else:
-                        raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
-                elif 'Jy/beam' in header['BUNIT']:#mainly for ALMA data or some other radio data
-                    beam = np.pi/(4.0*np.log(2.0))*header['BMAJ']*header['BMIN']
-                    if 'mJy/beam' in header['BUNIT']:
-                        unit_factor_Jy = 0.001 #from mJy to Jy
+                        raise Exception(
+                            "Neither CD1_1 nor CDELT1 were found in the header"
+                        )
+                elif (
+                    "Jy/beam" in header["BUNIT"]
+                ):  # mainly for ALMA data or some other radio data
+                    beam = np.pi / (4.0 * np.log(2.0)) * header["BMAJ"] * header["BMIN"]
+                    if "mJy/beam" in header["BUNIT"]:
+                        unit_factor_Jy = 0.001  # from mJy to Jy
                     else:
-                        unit_factor_Jy = 1.0 #leave it in Jy
-                    if 'CD1_1' in header:
-                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                        fluc_error = unit_factor_Jy*fluc_error/(beam/(np.absolute(header['CD1_1']))**2) #Jy
-                    elif 'CDELT1' in header:
-                        flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                        flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                        bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/(np.absolute(header['CDELT1']))**2) #Jy
-                        fluc_error = unit_factor_Jy*fluc_error/(beam/(np.absolute(header['CDELT1']))**2) #Jy
+                        unit_factor_Jy = 1.0  # leave it in Jy
+                    if "CD1_1" in header:
+                        flux_bkgsub = (
+                            unit_factor_Jy
+                            * ap_phot["aper_sum_bkgsub"].data[0]
+                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
+                        )  # Jy
+                        flux = (
+                            unit_factor_Jy
+                            * ap_phot["aperture_sum"].data[0]
+                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
+                        )  # Jy
+                        bkg = (
+                            unit_factor_Jy
+                            * ap_phot["aper_bkg"].data[0]
+                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
+                        )  # Jy
+                        fluc_error = (
+                            unit_factor_Jy
+                            * fluc_error
+                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
+                        )  # Jy
+                    elif "CDELT1" in header:
+                        flux_bkgsub = (
+                            unit_factor_Jy
+                            * ap_phot["aper_sum_bkgsub"].data[0]
+                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
+                        )  # Jy
+                        flux = (
+                            unit_factor_Jy
+                            * ap_phot["aperture_sum"].data[0]
+                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
+                        )  # Jy
+                        bkg = (
+                            unit_factor_Jy
+                            * ap_phot["aper_bkg"].data[0]
+                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
+                        )  # Jy
+                        fluc_error = (
+                            unit_factor_Jy
+                            * fluc_error
+                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
+                        )  # Jy
                     else:
-                        raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
-                elif 'Jy/pix' in header['BUNIT']:
-                    if 'mJy/pix' in header['BUNIT']:
-                        unit_factor_Jy = 0.001 #from mJy to Jy
+                        raise Exception(
+                            "Neither CD1_1 nor CDELT1 were found in the header"
+                        )
+                elif "Jy/pix" in header["BUNIT"]:
+                    if "mJy/pix" in header["BUNIT"]:
+                        unit_factor_Jy = 0.001  # from mJy to Jy
                     else:
-                        unit_factor_Jy = 1.0 #leave it in Jy
-                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0] #Jy
-                    fluc_error = unit_factor_Jy*fluc_error #Jy
-                elif 'Jy'==header['BUNIT']:
-                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                    flux = ap_phot['aperture_sum'].data[0] #Jy
-                    bkg = ap_phot['aper_bkg'].data[0] #Jy
-                    fluc_error = fluc_error #Jy
+                        unit_factor_Jy = 1.0  # leave it in Jy
+                    flux_bkgsub = (
+                        unit_factor_Jy * ap_phot["aper_sum_bkgsub"].data[0]
+                    )  # Jy
+                    flux = unit_factor_Jy * ap_phot["aperture_sum"].data[0]  # Jy
+                    bkg = unit_factor_Jy * ap_phot["aper_bkg"].data[0]  # Jy
+                    fluc_error = unit_factor_Jy * fluc_error  # Jy
+                elif "Jy" == header["BUNIT"]:
+                    flux_bkgsub = ap_phot["aper_sum_bkgsub"].data[0]  # Jy
+                    flux = ap_phot["aperture_sum"].data[0]  # Jy
+                    bkg = ap_phot["aper_bkg"].data[0]  # Jy
+                    fluc_error = fluc_error  # Jy
                 else:
-                    raise Exception('BUNIT (',header['BUNIT'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
+                    raise Exception(
+                        "BUNIT (",
+                        header["BUNIT"],
+                        ") found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation",
+                    )
 
-            elif 'FUNITS' in header:
-                if 'Jy/pix' in header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
-                    if 'mJy/pix' in header['FUNITS']:
-                        unit_factor_Jy = 0.001 #from mJy to Jy
+            elif "FUNITS" in header:
+                if (
+                    "Jy/pix" in header["FUNITS"]
+                ):  # This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                    if "mJy/pix" in header["FUNITS"]:
+                        unit_factor_Jy = 1  # 0.001 #from mJy to Jy
+                        print("WARNING: NOT converted!")
                     else:
-                        unit_factor_Jy = 1.0 #leave it in Jy
-                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0] #Jy
-                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0] #Jy
-                    fluc_error = unit_factor_Jy*fluc_error #Jy
-                elif 'Jy'==header['FUNITS']:#This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
-                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0] #Jy
-                    flux = ap_phot['aperture_sum'].data[0] #Jy
-                    bkg = ap_phot['aper_bkg'].data[0] #Jy
-                    fluc_error = fluc_error #Jy
-                elif 'Jy/sq-arc' in header['FUNITS']:#This is mainly for SOFIA data
-                    if 'mJy/sq-arc' in header['FUNITS']:
-                        unit_factor_Jy = 0.001 #from mJy to Jy
+                        # print("NO", header['FUNITS'])
+                        unit_factor_Jy = 1.0  # leave it in Jy
+                    flux_bkgsub = (
+                        unit_factor_Jy * ap_phot["aper_sum_bkgsub"].data[0]
+                    )  # Jy
+                    # print(unit_factor_Jy, ap_phot['aper_sum_bkgsub'].data[0])
+                    flux = unit_factor_Jy * ap_phot["aperture_sum"].data[0]  # Jy
+                    bkg = unit_factor_Jy * ap_phot["aper_bkg"].data[0]  # Jy
+                    fluc_error = unit_factor_Jy * fluc_error  # Jy
+                elif (
+                    "Jy" == header["FUNITS"]
+                ):  # This is mainly for SOFIA data that does not have BUNIT, it is FUNIT
+                    flux_bkgsub = ap_phot["aper_sum_bkgsub"].data[0]  # Jy
+                    flux = ap_phot["aperture_sum"].data[0]  # Jy
+                    bkg = ap_phot["aper_bkg"].data[0]  # Jy
+                    fluc_error = fluc_error  # Jy
+                elif "Jy/sq-arc" in header["FUNITS"]:  # This is mainly for SOFIA data
+                    if "mJy/sq-arc" in header["FUNITS"]:
+                        unit_factor_Jy = 0.001  # from mJy to Jy
                     else:
-                        unit_factor_Jy = 1.0 #leave it in Jy
-                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale**2 #Jy
-                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]*pixel_scale**2 #Jy
-                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]*pixel_scale**2 #Jy
-                    fluc_error = unit_factor_Jy*fluc_error*pixel_scale**2 #Jy
+                        unit_factor_Jy = 1.0  # leave it in Jy
+                    flux_bkgsub = (
+                        unit_factor_Jy
+                        * ap_phot["aper_sum_bkgsub"].data[0]
+                        * pixel_scale**2
+                    )  # Jy
+                    flux = (
+                        unit_factor_Jy
+                        * ap_phot["aperture_sum"].data[0]
+                        * pixel_scale**2
+                    )  # Jy
+                    bkg = (
+                        unit_factor_Jy * ap_phot["aper_bkg"].data[0] * pixel_scale**2
+                    )  # Jy
+                    fluc_error = unit_factor_Jy * fluc_error * pixel_scale**2  # Jy
                 else:
-                    raise Exception('FUNITS (',header['FUNITS'],') found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation')
+                    raise Exception(
+                        "FUNITS (",
+                        header["FUNITS"],
+                        ") found in the header but units not yet supported, use get_raw_flux() function and perform own units transformation",
+                    )
             else:
-                raise Exception('Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation')
+                raise Exception(
+                    "Neither BUNIT nor FUNITS found in the header, use get_raw_flux() function and perform own units transformation"
+                )
 
+        return FluxerContainer(
+            data=self.data,
+            flux_bkgsub=flux_bkgsub,
+            flux=flux,
+            fluc_error=fluc_error,
+            bkg=bkg,
+            central_coords=central_coords,
+            aper_rad=aper_rad,
+            inner_annu=inner_annu,
+            outer_annu=outer_annu,
+            x_source=x_source,
+            y_source=y_source,
+            aper_rad_pixel=aper_rad_pixel,
+            wcs_header=wcs_header,
+            aperture=aperture,
+            annulus_aperture=annulus_aperture,
+            mask=mask,
+            flux_method="get_flux",
+        )
 
-        return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,fluc_error=fluc_error,bkg=bkg,
-                 central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
-                 x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
-                 aperture=aperture,annulus_aperture=annulus_aperture,mask=mask,flux_method='get_flux')
-
-    def get_raw_flux(self,central_coords,aper_rad,inner_annu,outer_annu,mask=None):
-        '''
+    def get_raw_flux(self, central_coords, aper_rad, inner_annu, outer_annu, mask=None):
+        """
         Performs circular aperture photometry for a given image, specifying the central coordinates and
         the aperture radius. It returns the background subtracted flux and the flux including the background without
         any transformations of units. This functions is intended in case the user wants to apply a custom tranformation.
@@ -790,127 +994,201 @@ class SedFluxer:
 
         array: float,float
             with flux with background subtracted and flux including background without any units transformations
-        '''
+        """
 
-        data,header = self.data
-
+        data, header = self.data
 
         wcs_header = WCS(header).celestial
-        x_source,y_source = wcs_header.world_to_pixel(central_coords)
+        x_source, y_source = wcs_header.world_to_pixel(central_coords)
+        data_shape = np.shape(data)
 
-        #retrieves the pixel scale or size from the header
-        if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
-        elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+        # If source isn't in the image, return None
+        if (
+            (x_source < 0)
+            or (x_source > data_shape[1] - 1)
+            or (y_source < 0)
+            or (y_source > data_shape[0] - 1)
+        ):
+            print("WARNING: Source not in image. No values will be returned.")
+            return None
+
+        # retrieves the pixel scale or size from the header
+        if "CD1_1" in header:
+            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
+        elif "CDELT1" in header:
+            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
         else:
-            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
 
-        #defines the aperture size in pixels
-        aper_rad_pixel = aper_rad/pixel_scale
-        inner_annu_pixel = inner_annu/pixel_scale
-        outer_annu_pixel = outer_annu/pixel_scale
-        aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
-        annulus_aperture = CircularAnnulus([[x_source,y_source]],
-                                           r_in=inner_annu_pixel, r_out=outer_annu_pixel)
+        # defines the aperture size in pixels
+        aper_rad_pixel = aper_rad / pixel_scale
+        inner_annu_pixel = inner_annu / pixel_scale
+        outer_annu_pixel = outer_annu / pixel_scale
+        aperture = CircularAperture([[x_source, y_source]], r=aper_rad_pixel)
+        annulus_aperture = CircularAnnulus(
+            [[x_source, y_source]], r_in=inner_annu_pixel, r_out=outer_annu_pixel
+        )
 
-        aperture_area = aperture.area #main area for corrective factor in fluctuation estimation when masked
+        aperture_area = (
+            aperture.area
+        )  # main area for corrective factor in fluctuation estimation when masked
 
-        #here is the main code for the aperture photometry
-        #--> START of the aperture photometry block
-        annulus_masks = annulus_aperture.to_mask(method='center')
+        # here is the main code for the aperture photometry
+        # --> START of the aperture photometry block
+        annulus_masks = annulus_aperture.to_mask(method="center")
 
-        error = 0.1*data
+        error = 0.1 * data
         bkg_median = []
         for annu_mask in annulus_masks:
             if type(mask) is np.ndarray:
-                annulus_data = annu_mask.multiply(data*np.logical_not(mask))
+                annulus_data = annu_mask.multiply(data * np.logical_not(mask))
+                masked_mask = annu_mask.multiply(np.logical_not(mask))
             else:
                 annulus_data = annu_mask.multiply(data)
-            annulus_data_1d = annulus_data[annu_mask.data > 0]
+
+            if mask is not None:
+                annulus_data_1d = annulus_data[
+                    np.where((annu_mask.data > 0) & (masked_mask > 0))
+                ]
+            else:
+                annulus_data_1d = annulus_data[np.where((annu_mask.data > 0))]
+
             _, median_sigclip, _ = sigma_clipped_stats(annulus_data_1d)
             bkg_median.append(median_sigclip)
+        #             print('median', median_sigclip)
         bkg_median = np.array(bkg_median)
-        ap_phot = aperture_photometry(data, aperture,error=error,mask=mask) #circular aperture sum
-        ap_phot['annulus_median'] = bkg_median
-        ap_phot['aper_bkg'] = bkg_median * aperture.area_overlap(data, mask=mask, method='exact', subpixels=5) #consider a median value for the background subtraction
-        ap_phot['aper_sum_bkgsub'] = ap_phot['aperture_sum'] - ap_phot['aper_bkg'] #subtracting the background
-        #--> END of the aperture photometry block
+        ap_phot = aperture_photometry(
+            data, aperture, error=error, mask=mask
+        )  # circular aperture sum
+        ap_phot["annulus_median"] = bkg_median
+        ap_phot["aper_bkg"] = bkg_median * aperture.area_overlap(
+            data, mask=mask, method="exact", subpixels=5
+        )  # consider a median value for the background subtraction
+        ap_phot["aper_sum_bkgsub"] = (
+            ap_phot["aperture_sum"] - ap_phot["aper_bkg"]
+        )  # subtracting the background
+        # --> END of the aperture photometry block
 
-        #Estimating the error via background fluctuations in the annular background
-        #with patches with equal area to that of the aperture.
-        angles = np.arange(0.0,360.0,30.0)
-        aliasing = np.arange(0.0,90.0,15.0)
+        # Estimating the error via background fluctuations in the annular background
+        # with patches with equal area to that of the aperture.
+        angles = np.arange(0.0, 360.0, 30.0)
+        aliasing = np.arange(0.0, 90.0, 15.0)
 
         STD = []
         for i in aliasing:
             bkg_pos = []
             for alpha in angles:
-                alpha_aper = np.deg2rad(alpha+i)
-                bkg_pos.append((x_source+3.0/2.0*aper_rad_pixel*np.sin(alpha_aper),
-                                y_source+3.0/2.0*aper_rad_pixel*np.cos(alpha_aper)))
+                alpha_aper = np.deg2rad(alpha + i)
+                bkg_pos.append(
+                    (
+                        x_source + 3.0 / 2.0 * aper_rad_pixel * np.sin(alpha_aper),
+                        y_source + 3.0 / 2.0 * aper_rad_pixel * np.cos(alpha_aper),
+                    )
+                )
 
-            bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel/2.0)
-            bkg_aper_areas = bkg_aper.area_overlap(data=data,mask=mask)
+            bkg_aper = CircularAperture(bkg_pos, r=aper_rad_pixel / 2.0)
+            bkg_aper_areas = bkg_aper.area_overlap(data=data, mask=mask)
             bkg_aper_total_area = bkg_aper.area
-            ap_total_frac = np.nansum(bkg_aper_areas)/(bkg_aper_total_area*len(bkg_pos))
+            ap_total_frac = np.nansum(bkg_aper_areas) / (
+                bkg_aper_total_area * len(bkg_pos)
+            )
 
             if ap_total_frac < 0.5:
                 break
-                
+
             else:
-                bkg_phot = aperture_photometry(data, bkg_aper,mask=mask)
+                bkg_phot = aperture_photometry(data, bkg_aper, mask=mask)
 
-                #getting correcting factor when part of the fluctuation areas are masked
-                #here we assumed that area=nan is 0 and that the flux obtained in the masked
-                #areas is directly proportional to the total flux
-                area_corr_set1 = np.nansum(bkg_aper_areas[0:4])/aperture_area
-                area_corr_set2 = np.nansum(bkg_aper_areas[4:8])/aperture_area
-                area_corr_set3 = np.nansum(bkg_aper_areas[8:12])/aperture_area
+                # getting correcting factor when part of the fluctuation areas are masked
+                # here we assumed that area=nan is 0 and that the flux obtained in the masked
+                # areas is directly proportional to the total flux
+                area_corr_set1 = np.nansum(bkg_aper_areas[0:4]) / aperture_area
+                area_corr_set2 = np.nansum(bkg_aper_areas[4:8]) / aperture_area
+                area_corr_set3 = np.nansum(bkg_aper_areas[8:12]) / aperture_area
 
-                aper_set1 = bkg_phot['aperture_sum'][0:4].sum()/area_corr_set1
-                aper_set2 = bkg_phot['aperture_sum'][4:8].sum()/area_corr_set2
-                aper_set3 = bkg_phot['aperture_sum'][8:12].sum()/area_corr_set3
+                aper_set1 = bkg_phot["aperture_sum"][0:4].sum() / area_corr_set1
+                aper_set2 = bkg_phot["aperture_sum"][4:8].sum() / area_corr_set2
+                aper_set3 = bkg_phot["aperture_sum"][8:12].sum() / area_corr_set3
 
-                std = np.nanstd([aper_set1,aper_set2,aper_set3])#ignoring nans
-                STD.append(std)
+                all_set_areas = [area_corr_set1, area_corr_set2, area_corr_set3]
+                all_sets = [aper_set1, aper_set2, aper_set3]
+                count_sets = []
 
-        if ap_total_frac < 0.5:
-            fluc_error = ap_phot['aper_bkg'].data[0]
+                for i in range(len(all_set_areas)):
+                    if all_set_areas[i] >= 0.2:
+                        count_sets.append(all_sets[i])
+
+                if len(count_sets) < 2:
+                    break
+                else:
+                    std = np.nanstd(count_sets)  # ignoring nans
+                    STD.append(std)
+
+        if ap_total_frac < 0.5 or len(count_sets) < 2:
+            print(
+                f"WARNING: More than 50% of annulus for source at (RA={central_coords.ra:.2f}, Dec={central_coords.dec:.2f}) is masked. The bkg error estimation method will be used by default."
+            )
+            fluc_error = ap_phot["aper_bkg"].data[0]
         else:
+            print("Condition not met")
             fluc_error = np.mean(STD)
 
-        
-        flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]
-        flux = ap_phot['aperture_sum'].data[0]
-        bkg = ap_phot['aper_bkg'].data[0]
+        flux_bkgsub = ap_phot["aper_sum_bkgsub"].data[0]
+        flux = ap_phot["aperture_sum"].data[0]
+        bkg = ap_phot["aper_bkg"].data[0]
 
+        return FluxerContainer(
+            data=self.data,
+            flux_bkgsub=flux_bkgsub,
+            flux=flux,
+            fluc_error=fluc_error,
+            bkg=bkg,
+            central_coords=central_coords,
+            aper_rad=aper_rad,
+            inner_annu=inner_annu,
+            outer_annu=outer_annu,
+            x_source=x_source,
+            y_source=y_source,
+            aper_rad_pixel=aper_rad_pixel,
+            wcs_header=wcs_header,
+            aperture=aperture,
+            annulus_aperture=annulus_aperture,
+            mask=mask,
+            flux_method="get_raw_flux",
+        )
 
-        return FluxerContainer(data=self.data,flux_bkgsub=flux_bkgsub,flux=flux,fluc_error=fluc_error,bkg=bkg,
-                 central_coords=central_coords,aper_rad=aper_rad,inner_annu=inner_annu,outer_annu=outer_annu,
-                 x_source=x_source,y_source=y_source,aper_rad_pixel=aper_rad_pixel,wcs_header=wcs_header,
-                 aperture=aperture,annulus_aperture=annulus_aperture,mask=mask,flux_method='get_raw_flux')
-
-
-    def aperture_finder(self, coords, boundary_arcsec=60.,ap_inner=5.0,ap_outer=60.0,step_size=0.25,aper_increase=1.3,
-                                        threshold=1.1,tolerance=0.01,profile_plot=False, plot_map=False, exclusion_rad=5., max_iter=10, fluxes=None, min_flux=None):
-
-        '''
-        Finds the optimal aperture(s) of the given source(s) in a region. If a single source, coordinate
+    def get_optimal_aperture(
+        self,
+        central_coords,
+        boundary_arcsec=60.0,
+        ap_inner=5.0,
+        ap_outer=60.0,
+        step_size=0.25,
+        aper_increase=1.3,
+        threshold=1.1,
+        tolerance=0.01,
+        profile_plot=False,
+        plot_map=False,
+        exclusion_rad=5.0,
+        max_iter=10,
+        fluxes=None,
+        min_flux=None,
+    ):
+        """
+        Finds the optimal aperture(s) of the given source(s) in a region. If a single source coordinate
         is provided, function calls opt_ap_single. If a list of coordinates is given, function calls
         opt_ap_crowded to find the optimal aperture of each source and corresponding mask.
 
         Parameters
         ----------
-        image: fits file
-            Image used to find the "optimal" aperture radii of each source. Should be either a Herschel 70
-            micron image or a SOFIA 37 micron image for best results.
 
         coords: `astropy.coordinates.SkyCoord` OR a list of such statements
             Central coordinates where the aperture(s) will be centred on the data image.
             This must be a SkyCoord statement or a list of SkyCoord statements.
 
         boundary_arcsec: float
+            The radius (in arcsec) beyond a source that we will consider during the optimal aperture calculations. The purpose
+            of this is to save time by not considering all of the pixels in the entire image.
 
         ap_inner: float
                 Inner aperture radius given in arcsec. The script will take care to convert it into pixels.
@@ -930,7 +1208,7 @@ class SedFluxer:
 
         threshold: float
             It is the condition to be met such as, at the optimal aperture radius,
-            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.08, i.e. 10% increase in flux.
+            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.1, i.e. 10% increase in flux.
 
         tolerance: float
             The fractional change in aperture radii between iterations at which the algorithm will stop
@@ -955,18 +1233,59 @@ class SedFluxer:
         mask_list: list of arrays
             List of masks for each source that the user provided coordinates for. Masks are Boolean types.
 
-        '''
-        if type(coords) is astropy.coordinates.sky_coordinate.SkyCoord:
-            aperture = self.opt_ap_single(coords,ap_inner=ap_inner,ap_outer=ap_outer,step_size=step_size,aper_increase=aper_increase,threshold=threshold,profile_plot=profile_plot, mask=None)
+        """
+
+        if type(central_coords) is astropy.coordinates.sky_coordinate.SkyCoord:
+            aperture = self.opt_ap_single(
+                central_coords,
+                ap_inner=ap_inner,
+                ap_outer=ap_outer,
+                step_size=step_size,
+                aper_increase=aper_increase,
+                threshold=threshold,
+                profile_plot=profile_plot,
+                mask=None,
+            )
             return aperture
-        elif type(coords) is list and len(coords) > 1:
-            aperture_list, mask_list = self.opt_ap_crowded(coords, boundary_arcsec=boundary_arcsec, ap_inner=ap_inner,ap_outer=ap_outer,step_size=step_size,aper_increase=aper_increase,
-                                        threshold=threshold,tolerance=tolerance,profile_plot=profile_plot, plot_map=plot_map, exclusion_rad=exclusion_rad, max_iter=max_iter, fluxes=fluxes, min_flux=min_flux)
+
+        elif (
+            type(central_coords) is list or "numpy.ndarray" and len(central_coords) > 1
+        ):
+            aperture_list, mask_list = self.opt_ap_crowded(
+                central_coords,
+                boundary_arcsec=boundary_arcsec,
+                ap_inner=ap_inner,
+                ap_outer=ap_outer,
+                step_size=step_size,
+                aper_increase=aper_increase,
+                threshold=threshold,
+                profile_plot=profile_plot,
+                tolerance=tolerance,
+                plot_map=plot_map,
+                max_iter=max_iter,
+                fluxes=fluxes,
+                min_flux=min_flux,
+            )
             return aperture_list, mask_list
 
+        else:
+            print(
+                "Please provide either a single astropy.coordinates.SkyCoord statement OR a list of such statements"
+            )
+            return
 
-    def opt_ap_single(self,central_coords,ap_inner=5.0,ap_outer=60.0,step_size=0.25,aper_increase=1.3,threshold=1.1,profile_plot=False, mask=None):
-        '''
+    def opt_ap_single(
+        self,
+        central_coords,
+        ap_inner=5.0,
+        ap_outer=60.0,
+        step_size=0.25,
+        aper_increase=1.3,
+        threshold=1.1,
+        profile_plot=False,
+        mask=None,
+    ):
+        """
         Finds the optimal aperture based on the following method:
         EXPLAIN METHOD.
         In short: if one increases by 30% the aperture size, the flux does not increase by
@@ -975,8 +1294,7 @@ class SedFluxer:
 
         Parameters
         ----------
-        image: fits file
-            Image for which we would like to calculate the "optimal" aperture radius
+
         central_coords: `astropy.coordinates.SkyCoord`
             Central coordinates where the apertures will be centred on the data image.
             This must be a SkyCoord statement.
@@ -994,107 +1312,137 @@ class SedFluxer:
             Default is 1.30, i.e. 30% increase in aperture.
         threshold: float
             It is the condition to be met such as, at the optimal aperture radius,
-            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.08, i.e. 10% increase in flux.
+            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.1, i.e. 10% increase in flux.
         profile_plot: bool
             Plots the flux profile versus the aperture radius size. Default is False
-        exclusion_rad: float
-            The radius (in arcsec) around each source that it maintains control of in the first iteration.
 
         Returns
         -------
         opt_rad: float
             Optimal aperture radius defined by this method given in arcsec
 
-        '''
+        """
+
+        data, header = self.data
+        wcs_header = WCS(header).celestial
+        x_source, y_source = wcs_header.world_to_pixel(central_coords)
+        data_shape = np.shape(data)
+
+        # If source isn't in the image, return None
+        if (
+            (x_source < 0)
+            or (x_source > data_shape[1] - 1)
+            or (y_source < 0)
+            or (y_source > data_shape[0] - 1)
+        ):
+            print("WARNING: Source not in image. No aperture will be returned.")
+            opt_rad = None
+            return opt_rad
 
         FLUX_BKG = []
         FLUX = []
 
-
-        #Step size for sampling aperture radii
-        #Sample aperture radii
-        APER_RAD = np.arange(ap_inner, ap_outer, step_size)#arcsec
-
+        # Step size for sampling aperture radii
+        # Sample aperture radii
+        APER_RAD = np.arange(ap_inner, ap_outer, step_size)  # arcsec
 
         for radius in APER_RAD:
             try:
 
-                flux_bkg, flux, fluc_error, background = self.get_flux(central_coords=central_coords,
-                                                                       aper_rad=radius,
-                                                                       inner_annu=1.0*radius,
-                                                                       outer_annu=2.0*radius, mask=mask).value
-                unit = 1 # to consider Jy in label
+                flux_bkg, flux, fluc_error, background = self.get_flux(
+                    central_coords=central_coords,
+                    aper_rad=radius,
+                    inner_annu=1.0 * radius,
+                    outer_annu=2.0 * radius,
+                    mask=mask,
+                ).value
+                unit = 1  # to consider Jy in label
             except:
-                flux_bkg, flux, fluc_error, background = self.get_raw_flux(central_coords=central_coords,
-                                                                           aper_rad=radius,
-                                                                           inner_annu=1.0*radius,
-                                                                           outer_annu=2.0*radius, mask=mask).value
-                unit = 0 # to not consider Jy in label
+                flux_bkg, flux, fluc_error, background = self.get_raw_flux(
+                    central_coords=central_coords,
+                    aper_rad=radius,
+                    inner_annu=1.0 * radius,
+                    outer_annu=2.0 * radius,
+                    mask=mask,
+                ).value
+                unit = 0  # to not consider Jy in label
 
             FLUX_BKG.append(flux_bkg)
             FLUX.append(flux)
-
 
         x = np.copy(APER_RAD)
         y = np.copy(FLUX_BKG)
         flux_increase = []
         opt_rad = None
 
-        for i in range(len(x)-1):
-            #ideal radius is the radius aper_increase (default 30%) past the current radius
-            ideal_radius = aper_increase*x[i]
-            #closest_radius_ind is the index of the radius we have sampled closest to this ideal
+        for i in range(len(x) - 1):
+            # ideal radius is the radius aper_increase (default 30%) past the current radius
+            ideal_radius = aper_increase * x[i]
+            # closest_radius_ind is the index of the radius we have sampled closest to this ideal
             closest_radius_ind = np.argmin(np.abs(x - ideal_radius))
-            #flux at this closest radius
+            # flux at this closest radius
             flux = y[closest_radius_ind]
 
             if i != 0:
-                flux_increase.append((y[i] - y[i-1])/y[i])
+                flux_increase.append((y[i] - y[i - 1]) / y[i])
             else:
                 flux_increase.append(np.nan)
 
-            if flux <= y[i]*threshold:
+            if flux <= y[i] * threshold:
                 opt_rad = x[i]
                 break
 
-        if opt_rad is None: #if threshold condition was never reached
-            opt_rad = x[np.argmin(flux_increase)] #output the radius that yields the smallest percentage flux increase
+        if opt_rad is None:  # if threshold condition was never reached
+            opt_rad = x[
+                np.argmin(flux_increase)
+            ]  # output the radius that yields the smallest percentage flux increase
 
         if profile_plot:
 
             plt.figure()
-            plt.plot(x, y,'ro', markersize=2.5, label="Bkg-sub flux")
+            plt.plot(x, y, "ro", markersize=2.5, label="Bkg-sub flux")
 
             plt.axvline(x=opt_rad, color="black", label="Optimal Aperture")
             plt.xlabel("Aperture radius (arcsec)")
             if unit:
-                plt.ylabel('Flux (Jy)')
+                plt.ylabel("Flux (Jy)")
             else:
-                plt.ylabel('Flux (unitless)')
+                plt.ylabel("Flux (unitless)")
             plt.xlim(0)
             plt.ylim(0)
             plt.show()
 
-
         return opt_rad
 
-
-    def opt_ap_crowded(self, coord_list, boundary_arcsec=60., ap_inner=5.0,ap_outer=60.0, step_size=0.25, aper_increase=1.3, threshold=1.1, tolerance=0.01, profile_plot=False, plot_map=False, exclusion_rad=5., max_iter=10, fluxes=None, min_flux=None):
-
-        '''
+    def opt_ap_crowded(
+        self,
+        coord_list,
+        boundary_arcsec=60.0,
+        ap_inner=5.0,
+        ap_outer=60.0,
+        step_size=0.25,
+        aper_increase=1.3,
+        threshold=1.1,
+        tolerance=0.01,
+        profile_plot=False,
+        plot_map=False,
+        max_iter=10,
+        fluxes=None,
+        min_flux=None,
+    ):
+        """
         Finds the optimal apertures of the given source(s) in a region.
 
         Parameters
         ----------
-        image: fits file
-            Image used to find the "optimal" aperture radii of each source. Should be either a Herschel 70
-            micron image or a SOFIA 37 micron image for best results.
 
         coords: list of `astropy.coordinates.SkyCoord` statements
             Central coordinates where the apertures will be centred on the data image.
             This must be a list of SkyCoord statements.
 
         boundary_arcsec: float
+            The radius (in arcsec) beyond a source that we will consider during the optimal aperture calculations. The purpose
+            of this is to save time by not considering all of the pixels in the entire image.
 
         ap_inner: float
                 Inner aperture radius given in arcsec. The script will take care to convert it into pixels.
@@ -1105,7 +1453,7 @@ class SedFluxer:
                 It the ending point to find the optimal aperture. Default is 60.0 arcsec.
 
         step_size: float
-                Step size for sampling aperture radii. Default is 0.25arcsec.
+                Step size for sampling aperture radii. Default is 0.25 arcsec.
 
         aper_increase: float
             It is the increase in aperture to meet the condition
@@ -1114,14 +1462,11 @@ class SedFluxer:
 
         threshold: float
             It is the condition to be met such as, at the optimal aperture radius,
-            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.08, i.e. 10% increase in flux.
+            1.3*optimal radius <= flux at opt.rad. * threshold. Default is 1.1, i.e. 10% increase in flux.
 
         tolerance: float
             The fractional change in aperture radii between iterations at which the algorithm will stop
-            and output the apertures. Default is 0.01 (i.e., 1% change).
-
-        profile_plot: bool
-            Plots the flux profile versus the aperture radius size. Default is False.
+            and output the apertures corresponding to the coodinates given. Default is 0.01 (i.e., 1% change).
 
         plot_map: bool
             Plots the map showing which source (if any) each pixel is assigned to. Default is False.
@@ -1129,34 +1474,56 @@ class SedFluxer:
         Returns
         -------
         aperture_list: list of floats
-            Optimal aperture radii defined by this method given in arcsec
+            Optimal aperture radii corresponding to the coodinates given, in arcsec
 
         mask_list: list of arrays
-            List of masks for each source that the user provided coordinates for. Masks are Boolean types.
+            List of masks for each source, to be used in get_flux. Masks are Boolean types.
 
-        '''
+        """
         wcs_header = WCS(self.image.header).celestial
         img_shape = np.shape(self.data[0])
-        #initialize optimal aperture list given exlusion radius
-        optimal_apertures = [ap_inner]*len(coord_list)#np.zeros(len(coord_list)) #arcseconds
+
+        # First check to see if any sources is located outside of the image
+        bad_coords = []
+        for coord in coord_list:
+            x_coord, y_coord = wcs_header.world_to_pixel(coord)
+            if (
+                (x_coord < 0)
+                or (x_coord > img_shape[1] - 1)
+                or (y_coord < 0)
+                or (y_coord > img_shape[0] - 1)
+            ):
+                bad_coords.append(coord)
+        # If at least one source is located outside of the image, print a warning statement and return None
+        if len(bad_coords) > 0:
+            print(
+                "WARNING: At least one source is not in image. No values will be returned. Please remove the following coordinates and re-run:",
+                bad_coords,
+            )
+            return None
+
+        # initialize optimal aperture list given exlusion radius
+        optimal_apertures = [ap_inner] * len(coord_list)  # arcseconds
 
         if fluxes is not None and min_flux is not None:
-            fix_inds = np.where(np.array(fluxes)<min_flux)[0]
+            fix_inds = np.where(np.array(fluxes) < min_flux)[0]
             print("sources w/ ap fixed at the minimum:", fix_inds)
         else:
             fix_inds = []
 
-        #get pixel scale
-        if 'CD1_1' in self.image.header:
-            pixel_scale = np.absolute(self.image.header['CD1_1'])*3600.0
-        elif 'CDELT1' in self.image.header:
-            pixel_scale = np.absolute(self.image.header['CDELT1'])*3600.0
+        # get pixel scale
+        if "CD1_1" in self.image.header:
+            pixel_scale = np.absolute(self.image.header["CD1_1"]) * 3600.0
+        elif "CDELT1" in self.image.header:
+            pixel_scale = np.absolute(self.image.header["CDELT1"]) * 3600.0
+        else:
+            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
 
-        boundary = int(boundary_arcsec*pixel_scale)
+        boundary = int(boundary_arcsec / pixel_scale)
         x_sources = []
         y_sources = []
 
-        #record pixel positions of each source
+        # record pixel positions of each source
         for i in range(len(coord_list)):
             x_source, y_source = wcs_header.world_to_pixel(coord_list[i])
             x_sources.append(x_source)
@@ -1164,68 +1531,91 @@ class SedFluxer:
 
         stop = False
         iterations = 0
-        #changes_all = np.ones(len(coord_list))
         store_apertures = np.zeros(len(coord_list))
         avg_change = []
         masks = list([np.zeros(img_shape, dtype=bool)]) * len(coord_list)
-        #If not converged (at least one aperture has changed by >1% since previous iteration
+        # If not converged (at least one aperture has changed by >1% since previous iteration
         while stop == False:
-            #print(store_apertures)
             print("iteration number:", iterations)
-            #Record apertures from preveous iteration to compute change later
+            # Record apertures from preveous iteration to compute change later
             old_aps = np.copy(optimal_apertures)
-            #Loop through sources
+            # Loop through sources
             for i in range(len(coord_list)):
 
-                #initialize mask as Boolean array of "False" values
+                # initialize mask as Boolean array of "False" values
                 mask = np.zeros(img_shape, dtype=bool)
                 x_target = x_sources[i]
                 y_target = y_sources[i]
+
                 distances = []
-                #For each source in list...
+                # For each source in list...
                 for src in range(len(coord_list)):
-                    #For sources other than current target
+                    # For sources other than current target
                     if src != i:
                         x_source = x_sources[src]
                         y_source = y_sources[src]
-                        #retrieve radius to exclude around that source
-                        exclusion_rad = optimal_apertures[src]
-                        #calculate distance between current target and other source
-                        dist = distance.euclidean([x_target, y_target], [x_source, y_source])
-                        distances.append(dist*pixel_scale)
-                        #Loop through pixels within a certain window to save time -- need to fix this to make boundary generic
-                        for y in range(int(y_target)-boundary, int(y_target)+boundary+1):
-                            for x in range(int(x_target)-boundary, int(x_target)+boundary+1):
-                                #if pixel falls within the aperture of the other source...
-                                if (y-y_source)**2 + (x-x_source)**2 <= (exclusion_rad/pixel_scale)**2:
-                                    #AND is > ap_inner" away from current target
-                                    if (y-y_target)**2 + (x-x_target)**2 > (ap_inner/pixel_scale)**2:
-                                        #AND is closer to the other source than the target
-                                        if distance.euclidean([x_target, y_target], [x, y]) == distance.euclidean([x_source, y_source], [x, y]):
-                                            print("EQUAL")
-                                        elif distance.euclidean([x_target, y_target], [x, y]) > distance.euclidean([x_source, y_source], [x, y]):
-                                        #Mask this pixel out during optimal ap calculation
-                                            mask[y,x] = True
-                #Set upper bound of optimal aperture test to the distance to the source closest to the target
-                upper_rad = np.min(distances)
-                #Find optimal aperture with these constraints, masking out pixels that "belong" to another source
+                        # retrieve radius to exclude around that source
+                        exclusion_rad = optimal_apertures[
+                            src
+                        ]  # set to ap_inner in first iteration
+                        # calculate distance between current target and other source
+                        dist = distance.euclidean(
+                            [x_target, y_target], [x_source, y_source]
+                        )
+                        distances.append(dist * pixel_scale)
+
+                        # Loop through pixels within a certain window to save time
+
+                        # Make sure it doesn't run past the edge of the image
+                        y_start = np.max([int(y_target) - boundary, 0])
+                        y_stop = np.min([int(y_target) + boundary + 1, img_shape[0]])
+                        x_start = np.max([int(x_target) - boundary, 0])
+                        x_stop = np.min([int(x_target) + boundary + 1, img_shape[1]])
+
+                        for y in range(y_start, y_stop):
+                            for x in range(x_start, x_stop):
+                                # if pixel falls within the aperture of the other source...
+                                if (y - y_source) ** 2 + (x - x_source) ** 2 <= (
+                                    exclusion_rad / pixel_scale
+                                ) ** 2:
+                                    # AND is > ap_inner" away from current target
+                                    if (y - y_target) ** 2 + (x - x_target) ** 2 > (
+                                        ap_inner / pixel_scale
+                                    ) ** 2:
+                                        # AND is closer to the other source than the target (if pixel is equidistant from sources, it will be masked out for both)
+                                        if distance.euclidean(
+                                            [x_target, y_target], [x, y]
+                                        ) >= distance.euclidean(
+                                            [x_source, y_source], [x, y]
+                                        ):
+                                            # Mask this pixel out during optimal ap calculation
+                                            mask[y, x] = True
+
+                # Set upper bound of optimal aperture test to the distance to the source closest to the target
+                upper_rad = np.min([np.min(distances), ap_outer])
+                # Find optimal aperture with these constraints, masking out pixels that "belong" to another source
 
                 if i not in fix_inds:
-                    ap = self.opt_ap_single(coord_list[i],step_size=step_size,ap_inner=ap_inner,ap_outer=upper_rad,
-                                              aper_increase=aper_increase,
-                                              threshold=threshold,profile_plot=False, mask=mask)
+                    ap = self.opt_ap_single(
+                        coord_list[i],
+                        step_size=step_size,
+                        ap_inner=ap_inner,
+                        ap_outer=upper_rad,
+                        aper_increase=aper_increase,
+                        threshold=threshold,
+                        profile_plot=False,
+                        mask=mask,
+                    )
                 else:
                     ap = ap_inner
 
                 optimal_apertures[i] = ap
                 masks[i] = mask
-            #Calculate change in each aperture from previous iteration
-            change = (np.array(old_aps) - np.array(optimal_apertures))/np.array(old_aps)
+            # Calculate change in each aperture from previous iteration
+            change = (np.array(old_aps) - np.array(optimal_apertures)) / np.array(
+                old_aps
+            )
 
-            #print("apertures:", optimal_apertures)
-            #print("changes:", change)
-
-            #print("average absolute change:", np.mean(np.abs(change)))
             avg_change.append(np.mean(np.abs(change)))
             store_apertures = np.vstack((np.copy(store_apertures), optimal_apertures))
 
@@ -1239,94 +1629,114 @@ class SedFluxer:
                 print("The apertures at this iteration were", optimal_apertures)
                 stop = True
 
+            else:
+                pass
+
             iterations += 1
 
-        #create map of pixel assignments
+        # create map of pixel assignments
         assignment_map = np.zeros(np.shape(masks[0]))
+
         if plot_map == True:
             for i in range(len(masks)):
                 mask = masks[i]
                 x_target = x_sources[i]
                 y_target = y_sources[i]
                 rad = optimal_apertures[i]
-                for y in range(int(y_target)-int(rad)-1, int(y_target)+int(rad)+2):
-                    for x in range(int(x_target)-int(rad)-1, int(x_target)+int(rad)+2):
-                    #if pixel falls within the aperture of this source...
-                        if (y-y_target)**2 + (x-x_target)**2 <= (rad/pixel_scale)**2:
-                            if mask[y,x] == False:
-                                assignment_map[y,x] += i+1
+
+                # Make sure it doesn't run past the edge of the image
+                y_start = np.max([int(y_target) - int(rad) - 1, 0])
+                y_stop = np.min([int(y_target) + int(rad) + 2, img_shape[0]])
+                x_start = np.max([int(x_target) - int(rad) - 1, 0])
+                x_stop = np.min([int(x_target) + int(rad) + 2, img_shape[1]])
+
+                for y in range(y_start, y_stop):
+                    for x in range(x_start, x_stop):
+                        # if pixel falls within the aperture of this source...
+                        if (y - y_target) ** 2 + (x - x_target) ** 2 <= (
+                            rad / pixel_scale
+                        ) ** 2:
+                            if mask[y, x] == False:
+                                assignment_map[y, x] += i + 1
 
             self.plot_mask(coord_list, optimal_apertures, assignment_map)
+
+        if profile_plot:
+            for i in range(len(coord_list)):
+                if i not in fix_inds:
+                    _ = self.opt_ap_single(
+                        coord_list[i],
+                        step_size=step_size,
+                        ap_inner=ap_inner,
+                        ap_outer=upper_rad,
+                        aper_increase=aper_increase,
+                        threshold=threshold,
+                        profile_plot=True,
+                        mask=masks[i],
+                    )
 
         return optimal_apertures, masks
 
     def regrid_masks(self, images, master_img, master_mask):
-
         """
-        Given a list of corresponding images and masks, this function generates the masks
-        for each source at each wavelength. It accomplishes this by regridding the master
+        Given a list of images and a "master mask", this function regrids the master
         mask to generate a mask for each other wavelength image for each source.
 
         Parameters
         ----------
-        src_name: string
-            Name of source (to be used in the file names for the masks)
         images: list of fits files
             Multiwavelength image data for the source
         master_img: FITS HDU
-            Image corresponding to the master mask. Use a Herschel 70 micron image for best results.
+            Image corresponding to the master mask. This is the image that was used to generate
+            the master mask. Use a Herschel 70 micron image for best results.
         master_mask: 2D array of Boolean values
-            Mask that we want to regrid for the other wavelength images.
-        filter_names: List of strings
-            List of filter names for the multiwavelength image data. These MUST be in the same order as the images.
+            Mask that will be regridded to match the image at each wavelength.
 
         Returns
         -------
         all_masks: List of lists containing masks
-            List of masks corresponding to each source at each wavelength. Note: index masks using
-            mask = masks[source_number][image_number]
+            List of masks corresponding to each wavelength. Note: index masks using
+            mask = masks[image_number]
 
         """
 
-        def regrid(template, mask_hdu):
-            '''
-            Parameters
-            ----------
-            template: HDU that will act as a template for the new, regridded HDU
-            mask_hdu: HDU of mask before regridding
-            Returns
-            -------
-            regridded: regridded mask
-            '''
-            mask_data = mask_hdu.data
-            mask_header = mask_hdu.header
-            regridded, _ = reproject_exact((mask_data, mask_header), template.header)
-            return regridded
-
         masks_regridded = []
-        #Now, regrid these masks based on the master image for each other wavelength
-        mask_to_regrid = master_mask
-        mask_to_regrid_hdu = pyfits.PrimaryHDU(data = (mask_to_regrid).astype(int), header = master_img.header)
+        master_mask_hdu = pyfits.PrimaryHDU(
+            data=(master_mask).astype(int), header=master_img.header
+        )
+        # We will regrid the master mask to match the image at each wavelength, so that we have a mask correcponding to each img
+        # Loop through the images
         for i in range(len(images)):
-             #"template" image to use for the regridding
+            # "template" is the image that we want to regrid the master mask to match
             template = images[i]
-            regridded_mask = np.round(regrid(template, mask_to_regrid_hdu),0).astype(int).astype(bool)
-            #regridded_mask = regrid(template, mask_to_regrid_hdu).astype(int).astype(bool)
+            # Use reproject_exact to regrid teh master mask to match the template
+            regridded_mask_unrounded, _ = reproject_exact(
+                (master_mask_hdu.data, master_mask_hdu.header), template.header
+            )
+            # Round values of the regridded masks so that pixels >=0.5 will NOT be masked out AND pixels >0.5 WILL be masked out.
+            regridded_mask = (
+                np.round(regridded_mask_unrounded, 0).astype(int).astype(bool)
+            )
 
             masks_regridded.append(regridded_mask)
 
         return masks_regridded
 
-
-    def plot_aps(self, coord_list, aperture_list, pixel_map=None, xlim=None, ylim=None, show=True):
-
+    def plot_multiple_aps(
+        self,
+        coord_list,
+        aperture_list,
+        pixel_map=None,
+        xlim=None,
+        ylim=None,
+        show=True,
+        colors=None,
+    ):
         """
         Plots apertures ontop of image
 
         Parameters
         ----------
-        image: FITS HDU
-            Image to plot
         coord_list: list of `astropy.coordinates.SkyCoord` statements
             List of coordinates on which each aperture is centered
         aperture_list: list of aperture radii to plot
@@ -1336,68 +1746,99 @@ class SedFluxer:
         None. Just plots apertures.
         """
 
-        data,header = self.data
+        data, header = self.data
 
         wcs_header = WCS(self.image.header).celestial
-        plt.figure(figsize=(6,6))
+        plt.figure(figsize=(6, 6))
         plt.subplot(projection=wcs_header)
 
-        if 'CD1_1' in header:
-            pixel_scale = np.absolute(header['CD1_1'])*3600.0
-        elif 'CDELT1' in header:
-            pixel_scale = np.absolute(header['CDELT1'])*3600.0
+        if "CD1_1" in header:
+            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
+        elif "CDELT1" in header:
+            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
         else:
-            raise Exception('Neither CD1_1 nor CDELT1 were found in the header')
+            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
 
+        # calculate center coordinate (to use if no plotting lims are given)
+        single_coord = SkyCoord(
+            ra=[coord.ra for coord in coord_list] * u.deg,
+            dec=[coord.dec for coord in coord_list] * u.deg,
+            frame="fk5",
+            equinox="J1950",
+        )
+        x_source_cent, y_source_cent = wcs_header.world_to_pixel(
+            SkyCoord(single_coord.cartesian.mean())
+        )
 
-        x_source_cent, y_source_cent = wcs_header.world_to_pixel(coord_list[0])
+        # plot image
+        largest_ap_rad_pixel = np.max(aperture_list) / pixel_scale
+        data_for_norm = data  # [int(y_source_cent-5.0*primary_ap_rad_pixel):int(y_source_cent+5.0*primary_ap_rad_pixel),
+        # int(x_source_cent-5.0*primary_ap_rad_pixel):int(x_source_cent+5.0*primary_ap_rad_pixel)]
+        norm = simple_norm(
+            data_for_norm[data_for_norm > 0], stretch="log", percent=100.0
+        )
+        # tr = scipy.ndimage.rotate(data, 45)
+        plt.imshow(data, cmap="inferno", origin="lower", norm=norm)
 
-        #plot image
-
-        primary_ap_rad_pixel = np.max(aperture_list)/pixel_scale
-        data_for_norm = data#[int(y_source_cent-5.0*primary_ap_rad_pixel):int(y_source_cent+5.0*primary_ap_rad_pixel),
-                                 #int(x_source_cent-5.0*primary_ap_rad_pixel):int(x_source_cent+5.0*primary_ap_rad_pixel)]
-        norm = simple_norm(data_for_norm[data_for_norm>0], stretch='log', percent=100.)
-        #tr = scipy.ndimage.rotate(data, 45)
-        plt.imshow(data, cmap='inferno', origin='lower', norm=norm)
-
-        #set x and y limits and labels
-        #plt.xlim(x_source_cent-5.0*primary_ap_rad_pixel, x_source_cent+5.0*primary_ap_rad_pixel)
-        #plt.ylim(y_source_cent-5.0*primary_ap_rad_pixel, y_source_cent+5.0*primary_ap_rad_pixel)
+        # set x and y limits and labels
         if xlim:
             plt.xlim(xlim[0], xlim[1])
+        else:
+            x_start = np.max([x_source_cent - 5.0 * largest_ap_rad_pixel, 0])
+            x_stop = np.min(
+                [x_source_cent + 5.0 * largest_ap_rad_pixel, np.shape(data)[1]]
+            )
+            plt.xlim(x_start, x_stop)
+
         if ylim:
             plt.ylim(ylim[0], ylim[1])
-        plt.xlabel('RA (J2000)')
-        plt.ylabel('Dec (J2000)')
+        else:
+            y_start = np.max([y_source_cent - 5.0 * largest_ap_rad_pixel, 0])
+            y_stop = np.min(
+                [y_source_cent + 5.0 * largest_ap_rad_pixel, np.shape(data)[0]]
+            )
+            plt.ylim(y_start, y_stop)
 
-        #plot apertures
+        plt.xlabel("RA (J2000)")
+        plt.ylabel("Dec (J2000)")
+
+        # plot apertures
         for i in range(len(aperture_list)):
             x_source, y_source = wcs_header.world_to_pixel(coord_list[i])
-            plt.plot(x_source, y_source,'ko', markersize=2)
-            plt.text(x_source+3, y_source+3, i, color='white', fontsize=8)
-            #defines the aperture size in pixels
-            aper_rad_pixel = aperture_list[i]/pixel_scale
-            aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
-            aperture.plot(color='white', linewidth=1.5)
+            plt.plot(x_source, y_source, "ko", markersize=2)
+            plt.text(x_source + 3, y_source + 3, i + 1, color="black", fontsize=10)
+            # defines the aperture size in pixels
+            aper_rad_pixel = aperture_list[i] / pixel_scale
+            aperture = CircularAperture([[x_source, y_source]], r=aper_rad_pixel)
+            if colors:
+                clr = colors[i]
+            else:
+                clr = "white"
+            aperture.plot(color=clr, linewidth=1.5)
 
         if pixel_map is not None:
             mask_to_plot = np.array(pixel_map)
             mask_cmap = plt.cm.Greys_r
-            mask_cmap.set_bad(color='white',alpha=0.)
-            plt.imshow(mask_to_plot,vmin=0,vmax=1,cmap=mask_cmap,alpha=0.1)
+            mask_cmap.set_bad(color="white", alpha=0.0)
+            plt.imshow(mask_to_plot, vmin=0, vmax=1, cmap=mask_cmap, alpha=0.1)
 
-        colorbar=True
+        colorbar = True
         if colorbar:
-            cbar_ticks = np.logspace(np.log10(norm.vmin),np.log10(norm.vmax),num=5)
-            if 'BUNIT' in header:
-                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['BUNIT']), pad=0.01)
-            elif 'FUNITS' in header:
-                cbar = plt.colorbar(label='PixelUnits: {0}'.format(header['FUNITS']), pad=0.01)
-            elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
-                cbar = plt.colorbar(label='{0}'.format(header['COMMENT'][17]), pad=0.01)
+            cbar_ticks = np.logspace(np.log10(norm.vmin), np.log10(norm.vmax), num=5)
+            if "BUNIT" in header:
+                cbar = plt.colorbar(
+                    label="PixelUnits: {0}".format(header["BUNIT"]), pad=0.01
+                )
+            elif "FUNITS" in header:
+                cbar = plt.colorbar(
+                    label="PixelUnits: {0}".format(header["FUNITS"]), pad=0.01
+                )
+            elif (
+                "COMMENT" in header and len(header["COMMENT"]) >= 17
+            ):  # work around to print date in WISE data
+                cbar = plt.colorbar(label="{0}".format(header["COMMENT"][17]), pad=0.01)
             else:
-                cbar = plt.colorbar(label='PixelUnits: check header', pad=0.01)
+                cbar = plt.colorbar(label="PixelUnits: check header", pad=0.01)
             cbar.set_ticks(cbar_ticks)
             cbar.set_ticklabels(cbar_ticks)
             cbar.ax.set_yticklabels(["{:.2f}".format(i) for i in cbar_ticks])
@@ -1410,13 +1851,11 @@ class SedFluxer:
         Plots a Boolean mask as a 2D image (bright pixels indicate True/masking)
         Parameters
         ----------
-        image: fits file
-            Image for which we would like to calculate the "optimal" aperture radius
-        central_coords: `astropy.coordinates.SkyCoord`
+        coord_list: list of `astropy.coordinates.SkyCoord`
             Central coordinates where the apertures will be centred on the data image.
-            This must be a SkyCoord statement.
-        rad: float
-            radius of aperture (used for x and y lims of plot)
+            This must be a list of SkyCoord statements.
+        rad_list: list
+            list of aperture radii (used for x and y lims of plot)
         mask: 2D Boolean array
             mask to plot
         Returns
@@ -1424,30 +1863,50 @@ class SedFluxer:
         None. Just plots mask.
         """
         wcs_header = WCS(self.image.header).celestial
-        #pixel location of source
-        x_source_central, y_source_central = wcs_header.world_to_pixel(coord_list[0])
-        if 'CD1_1' in self.image.header:
-            pixel_scale = np.absolute(self.image.header['CD1_1'])*3600.0
-        elif 'CDELT1' in self.image.header:
-            pixel_scale = np.absolute(self.image.header['CDELT1'])*3600.0
+
+        # calculate center coordinate
+        single_coord = SkyCoord(
+            ra=[coord.ra for coord in coord_list] * u.deg,
+            dec=[coord.dec for coord in coord_list] * u.deg,
+            frame="fk5",
+            equinox="J1950",
+        )
+        x_source_cent, y_source_cent = wcs_header.world_to_pixel(
+            SkyCoord(single_coord.cartesian.mean())
+        )
+
+        if "CD1_1" in self.image.header:
+            pixel_scale = np.absolute(self.image.header["CD1_1"]) * 3600.0
+        elif "CDELT1" in self.image.header:
+            pixel_scale = np.absolute(self.image.header["CDELT1"]) * 3600.0
+        else:
+            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
+
+        largest_ap_rad_pixel = np.max(rad_list) / pixel_scale
+
         plt.figure()
         plt.subplot(projection=wcs_header)
 
-#         plt.xlim(x_source_central-5.0*rad_list[0]/pixel_scale,x_source_central+5.0*np.max(rad_list)/pixel_scale)
-#         plt.ylim(y_source_central-5.0*rad_list[0]/pixel_scale,y_source_central+5.0*np.max(rad_list)/pixel_scale)
-
-
-        #defines the aperture size in pixels
+        # defines the aperture size in pixels
         for i in range(len(coord_list)):
             x_source, y_source = wcs_header.world_to_pixel(coord_list[i])
             rad = rad_list[i]
-            aper_rad_pixel = rad/pixel_scale
-            aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
-            aperture.plot(color='red')
-            plt.plot(x_source, y_source,'rx')
+            aper_rad_pixel = rad / pixel_scale
+            aperture = CircularAperture([[x_source, y_source]], r=aper_rad_pixel)
+            aperture.plot(color="red")
+            plt.plot(x_source, y_source, "rx")
 
-        plt.xlabel('RA (J2000)')
-        plt.ylabel('Dec (J2000)')
+        plt.xlabel("RA (J2000)")
+        plt.ylabel("Dec (J2000)")
+
+        plt.xlim(
+            x_source_cent - 5.0 * largest_ap_rad_pixel,
+            x_source_cent + 5.0 * largest_ap_rad_pixel,
+        )
+        plt.ylim(
+            y_source_cent - 5.0 * largest_ap_rad_pixel,
+            y_source_cent + 5.0 * largest_ap_rad_pixel,
+        )
 
         mask_int = mask
 
@@ -1455,13 +1914,22 @@ class SedFluxer:
         plt.show()
 
 
-class FitterContainer():
-    '''
+class FitterContainer:
+    """
     A class to store the results from the SedFluxer class
-    '''
+    """
 
-    def __init__(self,models,master_dir="./",extinction_law="kmh",
-                 lambda_array=None,flux_array=None,err_flux_array=None,upper_limit_array=None,dist=None):
+    def __init__(
+        self,
+        models,
+        master_dir="./",
+        extinction_law="kmh",
+        lambda_array=None,
+        flux_array=None,
+        err_flux_array=None,
+        upper_limit_array=None,
+        dist=None,
+    ):
         self.models_array = models
         self.master_dir = master_dir
         self.extc_law = extinction_law
@@ -1472,23 +1940,28 @@ class FitterContainer():
         self.dist = dist
         self.__best_model = None
 
-    #TODO: DELETE all these functions as now everything goes through get_model_info()
-    #I do not think this is necessary anymore
+    # TODO: DELETE all these functions as now everything goes through get_model_info()
+    # I do not think this is necessary anymore
     def get_available_mc(self):
-        return set(self.models_array[:,0])
+        return set(self.models_array[:, 0])
 
     def get_available_sigma(self):
-        return set(self.models_array[:,1])
+        return set(self.models_array[:, 1])
 
     def get_available_ms(self):
-        return set(self.models_array[:,2])
+        return set(self.models_array[:, 2])
 
-    def get_index_from_model(self,mc,sigma,mstar,theta_view):
-        return mc,sigma,mstar,theta_view
+    def get_index_from_model(self, mc, sigma, mstar, theta_view):
+        return mc, sigma, mstar, theta_view
 
-    #TODO: Change mu variable by theta or theta_view
-    def get_model_info(self,keys=['mcore','sigma','mstar','theta_view'],tablename=None):
-        '''
+    # TODO: Change mu variable by theta or theta_view
+    def get_model_info(
+        self,
+        keys=["mcore", "sigma", "mstar", "theta_view"],
+        sorted_by="chisq_nonlim",
+        tablename=None,
+    ):
+        """
         Gets the model information from the results of the SED fit. Automatically sorts the results by chisq.
         Columns units are given as `astropy.units`
 
@@ -1500,6 +1973,11 @@ class FitterContainer():
             ['mcore','sigma','mstar','theta_view'] for the 8640 models including the viewing angle
             Default is ['mcore','sigma','mstar','theta_view']
 
+        sorted_by: str
+            specify the chisq.
+            It can be either chisq (considering the upper limits in the calculation) ir chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
+
         tablename: str, optional
             A path, or a Python file-like object. Note that fname is used verbatim,
             and there is no attempt to make the extension. Default is None.
@@ -1508,122 +1986,399 @@ class FitterContainer():
         Returns
         ----------
         table: `astropy.table` with all the model information based on the given keys
-        '''
+        """
+
+        if sorted_by not in ("chisq", "chisq_nonlim"):
+            raise ValueError("'sorted_by' must be either 'chisq', or 'chisq_nonlim'")
 
         models = self.models_array
         master_dir = self.master_dir
         norm_extc_law = self.extc_law
         dist = self.dist
 
-        nmu=20
-        mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
-        mu_arr=mu_arr[::-1] #reversing the array
-        theta_arr=np.arccos(mu_arr)/np.pi*180.0
+        nmu = 20
+        mu_arr = np.arange(float(nmu)) / float(nmu) + 1.0 / float(nmu) / 2.0
+        mu_arr = mu_arr[::-1]  # reversing the array
+        theta_arr = np.arccos(mu_arr) / np.pi * 180.0
 
-        #filtering the table before getting into the physical model information and luminosity calculations
-        columns_names = ['mcore','sigma','mstar','theta_view','av','chisq','chisq_nonlim']
+        # filtering the table before getting into the physical model information and luminosity calculations
+        columns_names = [
+            "mcore",
+            "sigma",
+            "mstar",
+            "theta_view",
+            "av",
+            "chisq",
+            "chisq_nonlim",
+        ]
 
-        models_table = Table(data=models,names = columns_names) #create astropy table
-        models_table.sort('chisq') #sort by chisq
-        models_table_filter = unique(models_table,keys=keys) #filter by keys
+        models_table = Table(data=models, names=columns_names)  # create astropy table
+        models_table.sort(sorted_by)  # sort by chisq or chisq_nonlim
+        models_table_filter = unique(models_table, keys=keys)  # filter by keys
 
         model_info = []
-        #TODO: get rid of the try except. Also the function should accept simply the idx of the models.
-        #Temporary fix to accept just one line table or multiple lines table
+        # TODO: get rid of the try except. Also the function should accept simply the idx of the models.
+        # Temporary fix to accept just one line table or multiple lines table
         try:
-            mc_idx,sigma_idx,mstar_idx,mu_idx,av,chisq,chisq_nonlim = models_table_filter['mcore','sigma','mstar','theta_view','av','chisq','chisq_nonlim']
-            model_dat = np.loadtxt(master_dir+'/Model_SEDs/model_info/{0:0=2d}_{1:0=2d}_{2:0=2d}'.format(int(mc_idx),int(sigma_idx),
-                                                                                                         int(mstar_idx))+'.dat',
-                                   unpack=True,skiprows=1)
+            mc_idx, sigma_idx, mstar_idx, mu_idx, av, chisq, chisq_nonlim = (
+                models_table_filter[
+                    "mcore",
+                    "sigma",
+                    "mstar",
+                    "theta_view",
+                    "av",
+                    "chisq",
+                    "chisq_nonlim",
+                ]
+            )
+            model_dat = np.loadtxt(
+                master_dir
+                + "/Model_SEDs/model_info/{0:0=2d}_{1:0=2d}_{2:0=2d}".format(
+                    int(mc_idx), int(sigma_idx), int(mstar_idx)
+                )
+                + ".dat",
+                unpack=True,
+                skiprows=1,
+            )
 
-            sed = np.loadtxt(master_dir+'/Model_SEDs/sed/{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}'.format(int(mc_idx),int(sigma_idx),
-                                                                                                     int(mstar_idx),int(mu_idx))+'.dat',unpack=True)
-            lambda_model = sed[0] #micron
-            nu_model=c_micron_s/lambda_model #s-1
-            flux_model = sed[1] #Lsun
-            lbol_iso = np.trapz(y=flux_model/nu_model,x=nu_model) #bolometric luminosity of the unextincted SED
-            flux_model_extincted = flux_model*10.0**(-0.4*av*norm_extc_law) #Lsun extincted
-            lbol_av = np.trapz(y=flux_model_extincted/nu_model,x=nu_model) #bolometric luminosity of the extincted SED
+            sed = np.loadtxt(
+                master_dir
+                + "/Model_SEDs/sed/{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}".format(
+                    int(mc_idx), int(sigma_idx), int(mstar_idx), int(mu_idx)
+                )
+                + ".dat",
+                unpack=True,
+            )
+            lambda_model = sed[0]  # micron
+            nu_model = c_micron_s / lambda_model  # s-1
+            flux_model = sed[1]  # Lsun
+            lbol_iso = np.trapz(
+                y=flux_model / nu_model, x=nu_model
+            )  # bolometric luminosity of the unextincted SED
+            flux_model_extincted = flux_model * 10.0 ** (
+                -0.4 * av * norm_extc_law
+            )  # Lsun extincted
+            lbol_av = np.trapz(
+                y=flux_model_extincted / nu_model, x=nu_model
+            )  # bolometric luminosity of the extincted SED
 
-            mcore,sigma,mstar,rcore,massenv,theta_w,rstar,lstar,tstar,mdisk,rdisk,mdotd,lbol,tnow = model_dat
-            model_info.append(['{0:0=2d}_{1:0=2d}_{2:0=2d}'.format(int(mc_idx),int(sigma_idx),int(mstar_idx)),
-                               chisq,chisq_nonlim,mcore,sigma,mstar,theta_arr[int(mu_idx)-1],
-                               dist,av,rcore,massenv,theta_w,rstar,lstar,tstar,mdisk,rdisk,
-                               mdotd,lbol,lbol_iso,lbol_av,tnow])
+            (
+                mcore,
+                sigma,
+                mstar,
+                rcore,
+                massenv,
+                theta_w,
+                rstar,
+                lstar,
+                tstar,
+                mdisk,
+                rdisk,
+                mdotd,
+                lbol,
+                tnow,
+            ) = model_dat
+            model_info.append(
+                [
+                    "{0:0=2d}_{1:0=2d}_{2:0=2d}".format(
+                        int(mc_idx), int(sigma_idx), int(mstar_idx)
+                    ),
+                    chisq,
+                    chisq_nonlim,
+                    mcore,
+                    sigma,
+                    mstar,
+                    theta_arr[int(mu_idx) - 1],
+                    dist,
+                    av,
+                    rcore,
+                    massenv,
+                    theta_w,
+                    rstar,
+                    lstar,
+                    tstar,
+                    mdisk,
+                    rdisk,
+                    mdotd,
+                    lbol,
+                    lbol_iso,
+                    lbol_av,
+                    tnow,
+                ]
+            )
         except:
             for ind_mod in models_table_filter:
-                mc_idx,sigma_idx,mstar_idx,mu_idx,av,chisq,chisq_nonlim = ind_mod['mcore','sigma','mstar','theta_view','av','chisq','chisq_nonlim']
-                model_dat = np.loadtxt(master_dir+'/Model_SEDs/model_info/{0:0=2d}_{1:0=2d}_{2:0=2d}'.format(int(mc_idx),int(sigma_idx),
-                                                                                                             int(mstar_idx))+'.dat',
-                           unpack=True,skiprows=1)
+                mc_idx, sigma_idx, mstar_idx, mu_idx, av, chisq, chisq_nonlim = ind_mod[
+                    "mcore",
+                    "sigma",
+                    "mstar",
+                    "theta_view",
+                    "av",
+                    "chisq",
+                    "chisq_nonlim",
+                ]
+                model_dat = np.loadtxt(
+                    master_dir
+                    + "/Model_SEDs/model_info/{0:0=2d}_{1:0=2d}_{2:0=2d}".format(
+                        int(mc_idx), int(sigma_idx), int(mstar_idx)
+                    )
+                    + ".dat",
+                    unpack=True,
+                    skiprows=1,
+                )
 
-                sed = np.loadtxt(master_dir+'/Model_SEDs/sed/{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}'.format(int(mc_idx),int(sigma_idx),
-                                                                                                         int(mstar_idx),int(mu_idx))+'.dat',unpack=True)
-                lambda_model = sed[0] #micron
-                nu_model=c_micron_s/lambda_model #s-1
-                flux_model = sed[1] #Lsun
-                lbol_iso = np.trapz(y=flux_model/nu_model,x=nu_model) #bolometric luminosity of the unextincted SED
-                flux_model_extincted = flux_model*10.0**(-0.4*av*norm_extc_law) #Lsun extincted
-                lbol_av = np.trapz(y=flux_model_extincted/nu_model,x=nu_model) #bolometric luminosity of the extincted SED
+                sed = np.loadtxt(
+                    master_dir
+                    + "/Model_SEDs/sed/{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}".format(
+                        int(mc_idx), int(sigma_idx), int(mstar_idx), int(mu_idx)
+                    )
+                    + ".dat",
+                    unpack=True,
+                )
+                lambda_model = sed[0]  # micron
+                nu_model = c_micron_s / lambda_model  # s-1
+                flux_model = sed[1]  # Lsun
+                lbol_iso = np.trapz(
+                    y=flux_model / nu_model, x=nu_model
+                )  # bolometric luminosity of the unextincted SED
+                flux_model_extincted = flux_model * 10.0 ** (
+                    -0.4 * av * norm_extc_law
+                )  # Lsun extincted
+                lbol_av = np.trapz(
+                    y=flux_model_extincted / nu_model, x=nu_model
+                )  # bolometric luminosity of the extincted SED
 
-                mcore,sigma,mstar,rcore,massenv,theta_w,rstar,lstar,tstar,mdisk,rdisk,mdotd,lbol,tnow = model_dat
-                model_info.append(['{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}'.format(int(mc_idx),int(sigma_idx),int(mstar_idx),int(mu_idx)),
-                                   chisq,chisq_nonlim,mcore,sigma,mstar,theta_arr[int(mu_idx)-1],
-                                   dist,av,rcore,massenv,theta_w,rstar,lstar,tstar,mdisk,rdisk,
-                                   mdotd,lbol,lbol_iso,lbol_av,tnow])
+                (
+                    mcore,
+                    sigma,
+                    mstar,
+                    rcore,
+                    massenv,
+                    theta_w,
+                    rstar,
+                    lstar,
+                    tstar,
+                    mdisk,
+                    rdisk,
+                    mdotd,
+                    lbol,
+                    tnow,
+                ) = model_dat
+                model_info.append(
+                    [
+                        "{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}".format(
+                            int(mc_idx), int(sigma_idx), int(mstar_idx), int(mu_idx)
+                        ),
+                        chisq,
+                        chisq_nonlim,
+                        mcore,
+                        sigma,
+                        mstar,
+                        theta_arr[int(mu_idx) - 1],
+                        dist,
+                        av,
+                        rcore,
+                        massenv,
+                        theta_w,
+                        rstar,
+                        lstar,
+                        tstar,
+                        mdisk,
+                        rdisk,
+                        mdotd,
+                        lbol,
+                        lbol_iso,
+                        lbol_av,
+                        tnow,
+                    ]
+                )
 
-        model_info = np.array(model_info,dtype=object)
+        model_info = np.array(model_info, dtype=object)
 
-        columns_names = ['SED_number','chisq','chisq_nonlim',
-                         'mcore','sigma','mstar','theta_view',
-                         'dist','av','rcore','massenv','theta_w_esc',
-                         'rstar','lstar','tstar','mdisk','rdisk',
-                         'mdotd','lbol','lbol_iso','lbol_av','t_now']
+        if sorted_by == "chisq_nonlim":
+            columns_names = [
+                "SED_number",
+                "chisq_nonlim",
+                "chisq",
+                "mcore",
+                "sigma",
+                "mstar",
+                "theta_view",
+                "dist",
+                "av",
+                "rcore",
+                "massenv",
+                "theta_w_esc",
+                "rstar",
+                "lstar",
+                "tstar",
+                "mdisk",
+                "rdisk",
+                "mdotd",
+                "lbol",
+                "lbol_iso",
+                "lbol_av",
+                "t_now",
+            ]
 
-        units = [u.dimensionless_unscaled,u.dimensionless_unscaled,u.dimensionless_unscaled,
-                 u.M_sun,u.g*u.cm**-2,u.M_sun,u.deg,
-                 u.pc,u.mag,u.pc,u.M_sun,u.deg,
-                 u.R_sun,u.L_sun,u.K,u.M_sun,u.au,
-                 u.M_sun/u.yr,u.L_sun,u.L_sun,u.L_sun,u.yr]
+        else:
+            columns_names = [
+                "SED_number",
+                "chisq",
+                "chisq_nonlim",
+                "mcore",
+                "sigma",
+                "mstar",
+                "theta_view",
+                "dist",
+                "av",
+                "rcore",
+                "massenv",
+                "theta_w_esc",
+                "rstar",
+                "lstar",
+                "tstar",
+                "mdisk",
+                "rdisk",
+                "mdotd",
+                "lbol",
+                "lbol_iso",
+                "lbol_av",
+                "t_now",
+            ]
 
-        dtype = [str,float,float,
-                 float,float,float,float,
-                 float,float,float,float,float,
-                 float,float,float,float,float,
-                 float,float,float,float,float]
+        units = [
+            u.dimensionless_unscaled,
+            u.dimensionless_unscaled,
+            u.dimensionless_unscaled,
+            u.M_sun,
+            u.g * u.cm**-2,
+            u.M_sun,
+            u.deg,
+            u.pc,
+            u.mag,
+            u.pc,
+            u.M_sun,
+            u.deg,
+            u.R_sun,
+            u.L_sun,
+            u.K,
+            u.M_sun,
+            u.au,
+            u.M_sun / u.yr,
+            u.L_sun,
+            u.L_sun,
+            u.L_sun,
+            u.yr,
+        ]
 
-        table_model_info = Table(data=[model_info[:,0],model_info[:,1],model_info[:,2],
-                                       model_info[:,3],model_info[:,4],model_info[:,5],
-                                       model_info[:,6],model_info[:,7],model_info[:,8],
-                                       model_info[:,9],model_info[:,10],model_info[:,11],
-                                       model_info[:,12],model_info[:,13],model_info[:,14],
-                                       model_info[:,15],model_info[:,16],model_info[:,17],
-                                       model_info[:,18],model_info[:,19],model_info[:,20],
-                                       model_info[:,21]],
-                                 names = columns_names, units = units, dtype= dtype)
+        dtype = [
+            str,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+        ]
 
-        #sort the table by chisq values and filter by unique values
-        table_model_info.sort('chisq')
-        table_model_unique = unique(table_model_info,keys=keys)
-        table_model_unique.sort('chisq') #the previous step sort them by they keys
+        if sorted_by == "chisq_nonlim":
+            table_model_info = Table(
+                data=[
+                    model_info[:, 0],
+                    model_info[:, 2] * units[2],
+                    model_info[:, 1] * units[1],
+                    model_info[:, 3] * units[3],
+                    model_info[:, 4] * units[4],
+                    model_info[:, 5] * units[5],
+                    model_info[:, 6] * units[6],
+                    model_info[:, 7] * units[7],
+                    model_info[:, 8] * units[8],
+                    model_info[:, 9] * units[9],
+                    model_info[:, 10] * units[10],
+                    model_info[:, 11] * units[11],
+                    model_info[:, 12] * units[12],
+                    model_info[:, 13] * units[13],
+                    model_info[:, 14] * units[14],
+                    model_info[:, 15] * units[15],
+                    model_info[:, 16] * units[16],
+                    model_info[:, 17] * units[17],
+                    model_info[:, 18] * units[18],
+                    model_info[:, 19] * units[19],
+                    model_info[:, 20] * units[20],
+                    model_info[:, 21] * units[21],
+                ],
+                names=columns_names,
+                dtype=dtype,
+            )
+            # names = columns_names, units = units, dtype= dtype)
+        else:
+            table_model_info = Table(
+                data=[
+                    model_info[:, 0],
+                    model_info[:, 1] * units[1],
+                    model_info[:, 2] * units[2],
+                    model_info[:, 3] * units[3],
+                    model_info[:, 4] * units[4],
+                    model_info[:, 5] * units[5],
+                    model_info[:, 6] * units[6],
+                    model_info[:, 7] * units[7],
+                    model_info[:, 8] * units[8],
+                    model_info[:, 9] * units[9],
+                    model_info[:, 10] * units[10],
+                    model_info[:, 11] * units[11],
+                    model_info[:, 12] * units[12],
+                    model_info[:, 13] * units[13],
+                    model_info[:, 14] * units[14],
+                    model_info[:, 15] * units[15],
+                    model_info[:, 16] * units[16],
+                    model_info[:, 17] * units[17],
+                    model_info[:, 18] * units[18],
+                    model_info[:, 19] * units[19],
+                    model_info[:, 20] * units[20],
+                    model_info[:, 21] * units[21],
+                ],
+                names=columns_names,
+                dtype=dtype,
+            )
+            # names = columns_names, units = units, dtype= dtype)
 
-        #For format consistency
-        table_model_unique['chisq'].info.format = '%.5f'
-        table_model_unique['chisq_nonlim'].info.format = '%.5f'
-        table_model_unique['theta_view'].info.format = '%.5f'
-        table_model_unique['av'].info.format = '%.5f'
-        table_model_unique['mdotd'].info.format = '%.5e'
-        table_model_unique['lbol'].info.format = '%.5e'
-        table_model_unique['lbol_iso'].info.format = '%.5e'
-        table_model_unique['lbol_av'].info.format = '%.5e'
-        table_model_unique['t_now'].info.format = '%.5e'
+        # sort the table by chisq or chisq_nonlim values and filter by unique values
+        table_model_info.sort(sorted_by)
+        table_model_unique = unique(table_model_info, keys=keys)
+        table_model_unique.sort(sorted_by)  # the previous step sort them by they keys
+
+        # For format consistency
+        table_model_unique["chisq"].info.format = "%.5f"
+        table_model_unique["chisq_nonlim"].info.format = "%.5f"
+        table_model_unique["theta_view"].info.format = "%.5f"
+        table_model_unique["av"].info.format = "%.5f"
+        table_model_unique["mdotd"].info.format = "%.5e"
+        table_model_unique["lbol"].info.format = "%.5e"
+        table_model_unique["lbol_iso"].info.format = "%.5e"
+        table_model_unique["lbol_av"].info.format = "%.5e"
+        table_model_unique["t_now"].info.format = "%.5e"
 
         if tablename is not None:
-            ascii.write(table_model_unique,tablename)
-            print('Table saved in ',tablename)
-        
-        return table_model_unique
+            ascii.write(table_model_unique, tablename, overwrite=True)
+            print("Table saved in ", tablename)
 
+        return table_model_unique
 
     @property
     def best_model(self):
@@ -1634,84 +2389,147 @@ class FitterContainer():
     def get_best_model(self):
         FULL_MODEL = self.models_array
 
-        nmc=15
-        mc_arr=np.array([10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0])
+        nmc = 15
+        mc_arr = np.array(
+            [
+                10.0,
+                20.0,
+                30.0,
+                40.0,
+                50.0,
+                60.0,
+                80.0,
+                100.0,
+                120.0,
+                160.0,
+                200.0,
+                240.0,
+                320.0,
+                400.0,
+                480.0,
+            ]
+        )
 
-        nsigma=4
-        sigma_arr=np.array([0.1,0.316,1.0,3.16])
+        nsigma = 4
+        sigma_arr = np.array([0.1, 0.316, 1.0, 3.16])
 
-        nms=14
-        ms_arr=np.array([0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0])
+        nms = 14
+        ms_arr = np.array(
+            [
+                0.5,
+                1.0,
+                2.0,
+                4.0,
+                8.0,
+                12.0,
+                16.0,
+                24.0,
+                32.0,
+                48.0,
+                64.0,
+                96.0,
+                128.0,
+                160.0,
+            ]
+        )
 
-        nmu=20
-        mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
-        mu_arr=mu_arr[::-1] #reversing the array
-        theta_arr=np.arccos(mu_arr)/np.pi*180.0
+        nmu = 20
+        mu_arr = np.arange(float(nmu)) / float(nmu) + 1.0 / float(nmu) / 2.0
+        mu_arr = mu_arr[::-1]  # reversing the array
+        theta_arr = np.arccos(mu_arr) / np.pi * 180.0
 
-        self.best_mc_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][0])
-        self.best_sigma_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][1])
-        self.best_ms_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][2])
-        self.best_theta_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][3])
+        self.best_mc_idx = int(
+            FULL_MODEL[FULL_MODEL[:, 5] == np.min(FULL_MODEL[:, 5])][0][0]
+        )
+        self.best_sigma_idx = int(
+            FULL_MODEL[FULL_MODEL[:, 5] == np.min(FULL_MODEL[:, 5])][0][1]
+        )
+        self.best_ms_idx = int(
+            FULL_MODEL[FULL_MODEL[:, 5] == np.min(FULL_MODEL[:, 5])][0][2]
+        )
+        self.best_theta_idx = int(
+            FULL_MODEL[FULL_MODEL[:, 5] == np.min(FULL_MODEL[:, 5])][0][3]
+        )
 
-        self.best_AV = FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][4]
-        self.best_chisq = FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][5]
+        self.best_AV = FULL_MODEL[FULL_MODEL[:, 5] == np.min(FULL_MODEL[:, 5])][0][4]
+        self.best_chisq = FULL_MODEL[FULL_MODEL[:, 5] == np.min(FULL_MODEL[:, 5])][0][5]
 
-        print('best Mc',mc_arr[self.best_mc_idx-1])
-        print('best sigma',sigma_arr[self.best_sigma_idx-1])
-        print('best m*',ms_arr[self.best_ms_idx-1])
-        print('best theta_view', theta_arr[self.best_theta_idx-1])
+        print("best Mc", mc_arr[self.best_mc_idx - 1])
+        print("best sigma", sigma_arr[self.best_sigma_idx - 1])
+        print("best m*", ms_arr[self.best_ms_idx - 1])
+        print("best theta_view", theta_arr[self.best_theta_idx - 1])
 
-        print('best AV', self.best_AV)
-        print('best chisq', self.best_chisq)
+        print("best AV", self.best_AV)
+        print("best chisq", self.best_chisq)
 
-        return self.best_mc_idx,self.best_sigma_idx,self.best_ms_idx,self.best_theta_idx,self.best_AV
+        return (
+            self.best_mc_idx,
+            self.best_sigma_idx,
+            self.best_ms_idx,
+            self.best_theta_idx,
+            self.best_AV,
+        )
 
 
 class SedFitter(object):
-    '''
+    """
     A class used to fit the SED model grid
-    '''
-    def __init__(self, extc_law='kmh',
-                 lambda_array=None,
-                 flux_array=None,
-                 err_flux_array=None,
-                 upper_limit_array=None,
-                 filter_array=None):
+    """
 
-        #Checks to ensure inputs are correct
+    def __init__(
+        self,
+        extc_law="kmh",
+        lambda_array=None,
+        flux_array=None,
+        err_flux_array=None,
+        upper_limit_array=None,
+        filter_array=None,
+    ):
+
+        # Checks to ensure inputs are correct
         if lambda_array is not None:
-            lambda_array=np.array(lambda_array)
-            if any(lambda_array<0):
-                raise ValueError("A value in the lambda array is negative, please check")
+            lambda_array = np.array(lambda_array)
+            if any(lambda_array < 0):
+                raise ValueError(
+                    "A value in the lambda array is negative, please check"
+                )
             if any(np.isnan(lambda_array)):
                 raise ValueError("A value in the lambda array is nan, please check")
         if flux_array is not None:
-            flux_array=np.array(flux_array)
-            if any(flux_array<0):
+            flux_array = np.array(flux_array)
+            if any(flux_array < 0):
                 raise ValueError("A value in the flux array is negative, please check")
             if any(np.isnan(flux_array)):
                 raise ValueError("A value in the flux array is nan, please check")
         if err_flux_array is not None:
-            err_flux_array=np.array(err_flux_array)
-            if any(flux_array<0):
-                raise ValueError("A value in the error flux array is negative, please check")
+            err_flux_array = np.array(err_flux_array)
+            if any(flux_array < 0):
+                raise ValueError(
+                    "A value in the error flux array is negative, please check"
+                )
             if any(np.isnan(err_flux_array)):
                 raise ValueError("A value in the error flux array is nan, please check")
 
-        #Check length of arrays are the same
-        #based on: https://stackoverflow.com/questions/35791051/better-way-to-check-if-all-lists-in-a-list-are-the-same-length
+        # Check length of arrays are the same
+        # based on: https://stackoverflow.com/questions/35791051/better-way-to-check-if-all-lists-in-a-list-are-the-same-length
         if lambda_array is not None:
-            lists = (lambda_array,flux_array,err_flux_array,upper_limit_array,filter_array)
+            lists = (
+                lambda_array,
+                flux_array,
+                err_flux_array,
+                upper_limit_array,
+                filter_array,
+            )
             it = iter(lists)
             the_len = len(next(it))
             if not all(len(l) == the_len for l in it):
-                raise ValueError('not all arrays have same length!, please check')
+                raise ValueError("not all arrays have same length!, please check")
 
-        #making sure upper limits array is bool
+        # making sure upper limits array is bool
         if upper_limit_array is not None:
-            upper_limit_array=np.array(upper_limit_array)
-            if not upper_limit_array.dtype=='bool':
-                upper_limit_array = np.array(upper_limit_array,dtype=bool)
+            upper_limit_array = np.array(upper_limit_array)
+            if not upper_limit_array.dtype == "bool":
+                upper_limit_array = np.array(upper_limit_array, dtype=bool)
 
         self.lambda_array = lambda_array
         self.flux_array = flux_array
@@ -1725,23 +2543,37 @@ class SedFitter(object):
         self.__print_default_filters = None
 
     def get_master_dir(self):
-        master_dir = pkg_resources.resource_filename("sedcreator","/")
+        master_dir = pkg_resources.resource_filename("sedcreator", "/")
         return master_dir
-        
+
     def get_model_data(self):
         master_dir = self.master_dir
-        ALL_model_dat = sorted(os.listdir(master_dir+'/Model_SEDs/sed/'))
-
+        ALL_model_dat = sorted(os.listdir(master_dir + "/Model_SEDs/sed/"))
 
         ALL_model_idx = []
         for i in ALL_model_dat:
-            ALL_model_idx.append([int(i[0:11][0:2]),int(i[0:11][3:5]),
-                                  int(i[0:11][6:8]),int(i[0:11][9:11])])
+            ALL_model_idx.append(
+                [
+                    int(i[0:11][0:2]),
+                    int(i[0:11][3:5]),
+                    int(i[0:11][6:8]),
+                    int(i[0:11][9:11]),
+                ]
+            )
 
-        return ALL_model_dat,ALL_model_idx
-    
-    def get_sed(self,mcore=10, sigma=0.1, mstar=0.5, theta_view=22.33, av=0,dist=1000, filter_array=None):
-        '''
+        return ALL_model_dat, ALL_model_idx
+
+    def get_sed(
+        self,
+        mcore=10,
+        sigma=0.1,
+        mstar=0.5,
+        theta_view=22.33,
+        av=0,
+        dist=1000,
+        filter_array=None,
+    ):
+        """
         Retrive the SED for give physical parameters.
         Note that not all combinations of the parameters are present in the models database,
         an error will be raised, please try with other combination.
@@ -1778,141 +2610,198 @@ class SedFitter(object):
         lambda_model, flux_model_extincted : (array,array)
             wavelength and flux for the selected physical parameters
             If filter_array is not None, lambda_model, flux_model_extincted have the same length as filter_array.
-        '''
+        """
 
-        #loading here SED model files, extinction law, default parameters
+        # loading here SED model files, extinction law, default parameters
         norm_extc_law = self.extc_law
         MODEL_DATA, MODEL_IDX = self.model_data
         master_dir = self.master_dir
         default_filters_table = self.default_filters
-        filter_name = default_filters_table['filter']
-        filter_wavelength = default_filters_table['wavelength']
+        filter_name = default_filters_table["filter"]
+        filter_wavelength = default_filters_table["wavelength"]
 
-        #database compose of this
-        nmc=15
-        mc_arr=np.array([10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0])
+        # database compose of this
+        nmc = 15
+        mc_arr = np.array(
+            [
+                10.0,
+                20.0,
+                30.0,
+                40.0,
+                50.0,
+                60.0,
+                80.0,
+                100.0,
+                120.0,
+                160.0,
+                200.0,
+                240.0,
+                320.0,
+                400.0,
+                480.0,
+            ]
+        )
 
-        nsigma=4
-        sigma_arr=np.array([0.1,0.316,1.0,3.16])
+        nsigma = 4
+        sigma_arr = np.array([0.1, 0.316, 1.0, 3.16])
 
-        nmstar=14
-        mstar_arr=np.array([0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0])
+        nmstar = 14
+        mstar_arr = np.array(
+            [
+                0.5,
+                1.0,
+                2.0,
+                4.0,
+                8.0,
+                12.0,
+                16.0,
+                24.0,
+                32.0,
+                48.0,
+                64.0,
+                96.0,
+                128.0,
+                160.0,
+            ]
+        )
 
-        nmu=20
-        mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
-        mu_arr=mu_arr[::-1] #reversing the array
-        theta_arr=np.arccos(mu_arr)/np.pi*180.0
+        nmu = 20
+        mu_arr = np.arange(float(nmu)) / float(nmu) + 1.0 / float(nmu) / 2.0
+        mu_arr = mu_arr[::-1]  # reversing the array
+        theta_arr = np.arccos(mu_arr) / np.pi * 180.0
 
-        #check input parameters are in database:
+        # check input parameters are in database:
 
         if mcore not in mc_arr:
-            print('input core mass (mc)', mcore, 'is not in the database')
-            print('please input one of the following:')
+            print("input core mass (mc)", mcore, "is not in the database")
+            print("please input one of the following:")
             print(mc_arr)
             raise ValueError("")
         if sigma not in sigma_arr:
-            print('input mass surface density (sigma)', sigma, 'is not in the database')
-            print('please input one of the following:')
+            print("input mass surface density (sigma)", sigma, "is not in the database")
+            print("please input one of the following:")
             print(sigma_arr)
             raise ValueError("")
         if mstar not in mstar_arr:
-            print('input stellar mass (m_star)', mstar, 'is not in the database')
-            print('please input one of the following:')
+            print("input stellar mass (m_star)", mstar, "is not in the database")
+            print("please input one of the following:")
             print(mstar_arr)
             raise ValueError("")
-        if np.round(theta_view,2) not in np.round(theta_arr,2):
-            print('input viewing angle (theta_view)', theta_view, 'is not in the database')
-            print('please input one of the following:')
-            print(np.round(theta_arr,2))
+        if np.round(theta_view, 2) not in np.round(theta_arr, 2):
+            print(
+                "input viewing angle (theta_view)", theta_view, "is not in the database"
+            )
+            print("please input one of the following:")
+            print(np.round(theta_arr, 2))
             raise ValueError("")
-        if av<0:
-            print('Av must be a positive float')
+        if av < 0:
+            print("Av must be a positive float")
             raise ValueError("")
 
         if filter_array is not None:
-            #checks if the user input a single filter without being an array
-            if type(filter_array)==str:
-                #if so convert into one
+            # checks if the user input a single filter without being an array
+            if type(filter_array) == str:
+                # if so convert into one
                 filter_array = [filter_array]
             for filt in filter_array:
                 if filt not in filter_name:
-                    print(filt,'is not in the default filters database')
-                    print('Please, make sure to input one of the following:')
+                    print(filt, "is not in the default filters database")
+                    print("Please, make sure to input one of the following:")
                     default_filters_table.pprint()
                     raise ValueError("")
 
             filter_idx = []
             for filter_value in filter_array:
-                filter_idx.append(np.where(filter_name==filter_value)[0][0])
+                filter_idx.append(np.where(filter_name == filter_value)[0][0])
 
-            lambda_array_filters = filter_wavelength[filter_idx] #this is use for the convolution
+            lambda_array_filters = filter_wavelength[
+                filter_idx
+            ]  # this is use for the convolution
             filter_array_model = filter_name[filter_idx]
 
-            #load the filters lambda and responses to make the convolution
+            # load the filters lambda and responses to make the convolution
             FILTER_wave_resp = []
             for filter_NAME in filter_array_model:
-                filter_file = np.loadtxt(master_dir+'/Model_SEDs/parfiles/'+filter_NAME+'.txt',unpack=True)
+                filter_file = np.loadtxt(
+                    master_dir + "/Model_SEDs/parfiles/" + filter_NAME + ".txt",
+                    unpack=True,
+                )
 
                 fwave = filter_file[0]
                 fresponse = filter_file[1]
 
-                fnu=c_micron_s/fwave
-                nf=len(fnu)
+                fnu = c_micron_s / fwave
+                nf = len(fnu)
 
                 if fnu[0] > fnu[1]:
-                    fnu=fnu[::-1]
-                    fresponse=fresponse[::-1]
+                    fnu = fnu[::-1]
+                    fresponse = fresponse[::-1]
 
-                dfnu=fnu[1:nf-1]-fnu[0:nf-2]
-                fint=np.sum(0.5*(fresponse[0:nf-2]+fresponse[1:nf-1])*dfnu)
-                fresponse=fresponse[1:nf-1]/fint
-                fwave=fwave[1:nf-1]
+                dfnu = fnu[1 : nf - 1] - fnu[0 : nf - 2]
+                fint = np.sum(
+                    0.5 * (fresponse[0 : nf - 2] + fresponse[1 : nf - 1]) * dfnu
+                )
+                fresponse = fresponse[1 : nf - 1] / fint
+                fwave = fwave[1 : nf - 1]
 
-                FILTER_wave_resp.append([fwave,fresponse,dfnu])
+                FILTER_wave_resp.append([fwave, fresponse, dfnu])
 
         if mcore in mc_arr:
-            mc_idx = np.where(mc_arr==mcore)[0]
+            mc_idx = np.where(mc_arr == mcore)[0]
         if sigma in sigma_arr:
-            sigma_idx = np.where(sigma_arr==sigma)[0]
+            sigma_idx = np.where(sigma_arr == sigma)[0]
         if mstar in mstar_arr:
-            mstar_idx = np.where(mstar_arr==mstar)[0]
-        if np.round(theta_view,2) in np.round(theta_arr,2):
-            mu_idx = np.where(np.round(theta_arr,2)==np.round(theta_view,2))[0]
+            mstar_idx = np.where(mstar_arr == mstar)[0]
+        if np.round(theta_view, 2) in np.round(theta_arr, 2):
+            mu_idx = np.where(np.round(theta_arr, 2) == np.round(theta_view, 2))[0]
 
-        SED_number = '{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}'.format(int(mc_idx)+1,int(sigma_idx)+1,
-                                                                  int(mstar_idx)+1,int(mu_idx)+1)
+        SED_number = "{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}".format(
+            int(mc_idx) + 1, int(sigma_idx) + 1, int(mstar_idx) + 1, int(mu_idx) + 1
+        )
 
-        if SED_number+'.dat' in os.listdir(master_dir+'/Model_SEDs/sed/'):
-            #access the data in the models
-            sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+SED_number+'.dat',unpack=True)
-            lambda_model = sed[0] #micron
-            flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*dist)**2.0) #from Lsun to erg s-1 cm-2
-            flux_model_extincted = flux_model*10.0**(-0.4*av*norm_extc_law)
+        if SED_number + ".dat" in os.listdir(master_dir + "/Model_SEDs/sed/"):
+            # access the data in the models
+            sed = np.loadtxt(
+                master_dir + "/Model_SEDs/sed/" + SED_number + ".dat", unpack=True
+            )
+            lambda_model = sed[0]  # micron
+            flux_model = (
+                sed[1] * Lsun2erg_s / (4.0 * np.pi * (pc2cm * dist) ** 2.0)
+            )  # from Lsun to erg s-1 cm-2
+            flux_model_extincted = flux_model * 10.0 ** (-0.4 * av * norm_extc_law)
 
             if filter_array is not None:
                 flux_model_extincted_CONV = []
-                for filt_conv,filt_wave in zip(FILTER_wave_resp,lambda_array_filters):
+                for filt_conv, filt_wave in zip(FILTER_wave_resp, lambda_array_filters):
                     fwave = filt_conv[0]
                     fresponse = filt_conv[1]
-                    dfnu=filt_conv[2]
+                    dfnu = filt_conv[2]
 
-                    I_arr1=np.interp(fwave[::-1],lambda_model[::-1],flux_model_extincted[::-1])
-                    I_arr1=I_arr1/c_micron_s*fwave[::-1]
-                    I_filt=np.sum(I_arr1*dfnu[::-1]*fresponse[::-1])
-                    I_filt=I_filt*c_micron_s/filt_wave
+                    I_arr1 = np.interp(
+                        fwave[::-1], lambda_model[::-1], flux_model_extincted[::-1]
+                    )
+                    I_arr1 = I_arr1 / c_micron_s * fwave[::-1]
+                    I_filt = np.sum(I_arr1 * dfnu[::-1] * fresponse[::-1])
+                    I_filt = I_filt * c_micron_s / filt_wave
                     flux_model_extincted_CONV.append(I_filt)
                 flux_model_extincted_CONV = np.array(flux_model_extincted_CONV)
-                return(lambda_array_filters,flux_model_extincted_CONV)
-
+                return (lambda_array_filters, flux_model_extincted_CONV)
 
         else:
-            raise ValueError('The specific combination of input parameters mc=',
-                             mc,'sigma=', sigma,'mstar=', mstar,'theta_view=', theta_view,
-                             'is not in the database, please try another combination')
+            raise ValueError(
+                "The specific combination of input parameters mc=",
+                mc,
+                "sigma=",
+                sigma,
+                "mstar=",
+                mstar,
+                "theta_view=",
+                theta_view,
+                "is not in the database, please try another combination",
+            )
 
-        
-        return lambda_model,flux_model_extincted
-            
+        return lambda_model, flux_model_extincted
+
     @property
     def print_default_filters(self):
         if self.__print_default_filters is None:
@@ -1921,23 +2810,25 @@ class SedFitter(object):
 
     def __get_default_filters(self):
         master_dir = self.master_dir
-        default_filt = ascii.read(master_dir+'/Model_SEDs/parfiles/filter_default.dat')
-        filter_name = default_filt['filter']
-        filter_wavelength = default_filt['wavelength']
-        instrument = default_filt['instrument']
-        default_filt_table = Table(data=[filter_name,filter_wavelength,instrument])
-        return(default_filt_table)
+        default_filt = ascii.read(
+            master_dir + "/Model_SEDs/parfiles/filter_default.dat"
+        )
+        filter_name = default_filt["filter"]
+        filter_wavelength = default_filt["wavelength"]
+        instrument = default_filt["instrument"]
+        default_filt_table = Table(data=[filter_name, filter_wavelength, instrument])
+        return default_filt_table
 
     def get_extinction_laws_available(self):
-        '''
+        """
         print all the extinction laws available
-        '''
+        """
         return 0
 
-    def get_norm_extinction_law(self,extc_law='kmh'):
-        '''
+    def get_norm_extinction_law(self, extc_law="kmh"):
+        """
         Computes the normalised extinction law based on the extc_law file
-        '''
+        """
 
         # available_ext = Utilities.get_available_ext_law()
         # if extc_law not in available_ext:
@@ -1947,50 +2838,60 @@ class SedFitter(object):
 
         master_dir = self.master_dir
 
-        #load a model to retrieve the lambda
-        #this is to interpolate the extinction law in the same lambda as the model
-        sed_test = np.loadtxt(master_dir+'/Model_SEDs/sed/01_01_01_01.dat',unpack=True)#load the first SED model
-        lambda_model = sed_test[0] #micron
+        # load a model to retrieve the lambda
+        # this is to interpolate the extinction law in the same lambda as the model
+        sed_test = np.loadtxt(
+            master_dir + "/Model_SEDs/sed/01_01_01_01.dat", unpack=True
+        )  # load the first SED model
+        lambda_model = sed_test[0]  # micron
 
-        #load the opacities and interpolate in the range of model wavelength
-        extc_file = np.loadtxt(master_dir+'/Model_SEDs/parfiles/'+extc_law+'.par',unpack=True)
+        # load the opacities and interpolate in the range of model wavelength
+        extc_file = np.loadtxt(
+            master_dir + "/Model_SEDs/parfiles/" + extc_law + ".par", unpack=True
+        )
 
         klam = extc_file[0]
         kkap = extc_file[3]
 
-        interp_kkap = np.interp(lambda_model, klam, kkap)#in the whole vector
-        interp_kV = np.interp(0.55, klam, kkap)#in the visible
+        interp_kkap = np.interp(lambda_model, klam, kkap)  # in the whole vector
+        interp_kV = np.interp(0.55, klam, kkap)  # in the visible
 
-        norm_extc_law = interp_kkap/interp_kV
+        norm_extc_law = interp_kkap / interp_kV
 
         return norm_extc_law
-    
-    def sed_convolution(self,filter_wave_resp,lambda_array_model,sed_lambda_model,flux_model_extincted):
-        '''
+
+    def sed_convolution(
+        self,
+        filter_wave_resp,
+        lambda_array_model,
+        sed_lambda_model,
+        flux_model_extincted,
+    ):
+        """
         Performs the convolution of the extincted SED with the filter response
-        '''
+        """
 
         flux_model_extincted_CONV = []
-        for filt_conv,filt_wave in zip(filter_wave_resp,lambda_array_model):
+        for filt_conv, filt_wave in zip(filter_wave_resp, lambda_array_model):
             fwave = filt_conv[0]
             fresponse = filt_conv[1]
-            dfnu=filt_conv[2]
+            dfnu = filt_conv[2]
 
-            I_arr1=np.interp(fwave[::-1],sed_lambda_model[::-1],flux_model_extincted[::-1])
-            I_arr1=I_arr1/c_micron_s*fwave[::-1]
-            I_filt=np.sum(I_arr1*dfnu[::-1]*fresponse[::-1])
-            I_filt=I_filt*c_micron_s/filt_wave
+            I_arr1 = np.interp(
+                fwave[::-1], sed_lambda_model[::-1], flux_model_extincted[::-1]
+            )
+            I_arr1 = I_arr1 / c_micron_s * fwave[::-1]
+            I_filt = np.sum(I_arr1 * dfnu[::-1] * fresponse[::-1])
+            I_filt = I_filt * c_micron_s / filt_wave
             flux_model_extincted_CONV.append(I_filt)
         flux_model_extincted_CONV = np.array(flux_model_extincted_CONV)
 
-        
         return flux_model_extincted_CONV
 
-
-    def sed_extinction(self,flux_model_log,av):
-        '''
+    def sed_extinction(self, flux_model_log, av):
+        """
         Extincts the flux_model given av
-        '''
+        """
 
         norm_extc_law = self.extc_law
         FILTER_wave_resp = self.FILTER_wave_resp
@@ -1999,188 +2900,291 @@ class SedFitter(object):
 
         treat_errors = self.treat_errors
 
-        #including differentiation between log and linear space
-        if treat_errors=='log':
-            flux_model_log_extc = flux_model_log-0.4*av*norm_extc_law
+        # including differentiation between log and linear space
+        if treat_errors == "log":
+            flux_model_log_extc = flux_model_log - 0.4 * av * norm_extc_law
         else:
-            flux_model_log_extc = flux_model_log*10**(-0.4*av*norm_extc_law)
+            flux_model_log_extc = flux_model_log * 10 ** (-0.4 * av * norm_extc_law)
 
-        flux_model_log_extc_conv = self.sed_convolution(FILTER_wave_resp,
-                                                        lambda_array_model,
-                                                        sed_lambda_model,
-                                                        flux_model_log_extc)
+        flux_model_log_extc_conv = self.sed_convolution(
+            FILTER_wave_resp, lambda_array_model, sed_lambda_model, flux_model_log_extc
+        )
 
         return flux_model_log_extc_conv
-    
 
-    def chisq(self,flux_model,av):
-        '''
+    def chisq(self, flux_model, av):
+        """
         chisq function as defined in Eq 4 of Z&T 2018.
         This equation is used to compute the chisq stored in the tables.
-        '''
+        """
 
         treat_errors = self.treat_errors
 
-        if treat_errors=='log':
-            #preparing the fluxes and errors in log space
-            flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
-            percentage_error = self.err_flux_array/self.flux_array
-            errup_fit_log_arr=np.log10(1.0+percentage_error,dtype=np.float64)# this is absolute error in log space
-            errlo_fit_log_arr=-np.log10(1.0-percentage_error,dtype=np.float64)# note 100% error means a infinite lower error in log
+        if treat_errors == "log":
+            # preparing the fluxes and errors in log space
+            flux_fit_log_arr = np.log10(self.flux_array, dtype=np.float64)
+            percentage_error = self.err_flux_array / self.flux_array
+            errup_fit_log_arr = np.log10(
+                1.0 + percentage_error, dtype=np.float64
+            )  # this is absolute error in log space
+            errlo_fit_log_arr = -np.log10(
+                1.0 - percentage_error, dtype=np.float64
+            )  # note 100% error means a infinite lower error in log
 
-            #these two lines are to avoid singularities in the case of error=0
-            errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
-            errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
+            # these two lines are to avoid singularities in the case of error=0
+            errup_fit_log_arr[errup_fit_log_arr == 0.0] = 1.0e-33
+            errlo_fit_log_arr[errlo_fit_log_arr == 0.0] = 1.0e-33
 
-            #this line is to avoid nan in log10(negative_value), we set it to very high number
-            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
+            # this line is to avoid nan in log10(negative_value), we set it to very high number
+            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)] = 1.0e33
 
-            nfit = len(self.upper_limit_array) #total number of points
-            errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-            errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            nfit = len(self.upper_limit_array)  # total number of points
+            errup_fit_log_arr[self.upper_limit_array] = (
+                1.0e33  # set upper limit errors to very high value
+            )
+            errlo_fit_log_arr[self.upper_limit_array] = (
+                1.0e33  # set lower limit errors to very high value
+            )
 
-            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            flux_model_ext_conv = self.sed_extinction(
+                flux_model, av
+            )  # extincted and then convoluted
 
-            up_err_for_chisq = flux_model_ext_conv>=flux_fit_log_arr
-            percentage_error_up = self.err_flux_array[up_err_for_chisq]/self.flux_array[up_err_for_chisq]
-            errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
-            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0\
-                              /errup_fit_log_arr[up_err_for_chisq]**2.0)
+            up_err_for_chisq = flux_model_ext_conv >= flux_fit_log_arr
+            percentage_error_up = (
+                self.err_flux_array[up_err_for_chisq]
+                / self.flux_array[up_err_for_chisq]
+            )
+            errup_fit_log_arr[up_err_for_chisq] = np.log10(
+                1.0 + percentage_error_up, dtype=np.float64
+            )
+            chisq_up = np.sum(
+                (
+                    flux_model_ext_conv[up_err_for_chisq]
+                    - flux_fit_log_arr[up_err_for_chisq]
+                )
+                ** 2.0
+                / errup_fit_log_arr[up_err_for_chisq] ** 2.0
+            )
 
-            lo_err_for_chisq = flux_model_ext_conv<flux_fit_log_arr
-            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-       flux_fit_log_arr[lo_err_for_chisq])**2.0/errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+            lo_err_for_chisq = flux_model_ext_conv < flux_fit_log_arr
+            chisq_lo = np.sum(
+                (
+                    flux_model_ext_conv[lo_err_for_chisq]
+                    - flux_fit_log_arr[lo_err_for_chisq]
+                )
+                ** 2.0
+                / errlo_fit_log_arr[lo_err_for_chisq] ** 2.0
+            )
 
-            chisq = (chisq_up+chisq_lo)/float(nfit)
-            up_err_for_chisq = flux_model_ext_conv>=flux_fit_log_arr
-            percentage_error_up = self.err_flux_array[up_err_for_chisq]/self.flux_array[up_err_for_chisq]
-            errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
-            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0\
-                              /errup_fit_log_arr[up_err_for_chisq]**2.0)
+            chisq = (chisq_up + chisq_lo) / float(nfit)
+            up_err_for_chisq = flux_model_ext_conv >= flux_fit_log_arr
+            percentage_error_up = (
+                self.err_flux_array[up_err_for_chisq]
+                / self.flux_array[up_err_for_chisq]
+            )
+            errup_fit_log_arr[up_err_for_chisq] = np.log10(
+                1.0 + percentage_error_up, dtype=np.float64
+            )
+            chisq_up = np.sum(
+                (
+                    flux_model_ext_conv[up_err_for_chisq]
+                    - flux_fit_log_arr[up_err_for_chisq]
+                )
+                ** 2.0
+                / errup_fit_log_arr[up_err_for_chisq] ** 2.0
+            )
 
-            lo_err_for_chisq = flux_model_ext_conv<flux_fit_log_arr
-            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0\
-                              /errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+            lo_err_for_chisq = flux_model_ext_conv < flux_fit_log_arr
+            chisq_lo = np.sum(
+                (
+                    flux_model_ext_conv[lo_err_for_chisq]
+                    - flux_fit_log_arr[lo_err_for_chisq]
+                )
+                ** 2.0
+                / errlo_fit_log_arr[lo_err_for_chisq] ** 2.0
+            )
 
-            chisq = (chisq_up+chisq_lo)/float(nfit)
+            chisq = (chisq_up + chisq_lo) / float(nfit)
 
-            nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30]) #updating the number of points considered to be upper limits
-            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+            nfit_nonlimit = len(
+                errup_fit_log_arr[errup_fit_log_arr < 1.0e30]
+            )  # updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq * float(nfit) / float(nfit_nonlimit)
 
         else:
-            #preparing the fluxes and errors in linear space
-            flux_fit_arr=self.flux_array
+            # preparing the fluxes and errors in linear space
+            flux_fit_arr = self.flux_array
             linear_err = copy.deepcopy(self.err_flux_array)
-            errup_fit_lin_arr=linear_err# this is absolute error in linear space
-            errlo_fit_lin_arr=linear_err# this is absolute error in linear space
+            errup_fit_lin_arr = linear_err  # this is absolute error in linear space
+            errlo_fit_lin_arr = linear_err  # this is absolute error in linear space
 
-            nfit = len(self.upper_limit_array) #total number of points
-            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set upper limit errors to flux value
-            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set lower limit errors to flux value
+            nfit = len(self.upper_limit_array)  # total number of points
+            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[
+                self.upper_limit_array
+            ]  # set upper limit errors to flux value
+            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[
+                self.upper_limit_array
+            ]  # set lower limit errors to flux value
 
-            #these two lines are to avoid singularities in the case of error=0
-            errup_fit_lin_arr[errup_fit_lin_arr==0.0]=1.0e-33
-            errlo_fit_lin_arr[errlo_fit_lin_arr==0.0]=1.0e-33
+            # these two lines are to avoid singularities in the case of error=0
+            errup_fit_lin_arr[errup_fit_lin_arr == 0.0] = 1.0e-33
+            errlo_fit_lin_arr[errlo_fit_lin_arr == 0.0] = 1.0e-33
 
-            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            flux_model_ext_conv = self.sed_extinction(
+                flux_model, av
+            )  # extincted and then convoluted
 
-            up_err_for_chisq = flux_model_ext_conv>=flux_fit_arr
+            up_err_for_chisq = flux_model_ext_conv >= flux_fit_arr
             errup_fit_lin_arr[up_err_for_chisq] = self.err_flux_array[up_err_for_chisq]
-            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_arr[up_err_for_chisq])**2.0\
-                              /errup_fit_lin_arr[up_err_for_chisq]**2.0)
+            chisq_up = np.sum(
+                (flux_model_ext_conv[up_err_for_chisq] - flux_fit_arr[up_err_for_chisq])
+                ** 2.0
+                / errup_fit_lin_arr[up_err_for_chisq] ** 2.0
+            )
 
-            lo_err_for_chisq = flux_model_ext_conv<flux_fit_arr
-            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_arr[lo_err_for_chisq])**2.0\
-                              /errlo_fit_lin_arr[lo_err_for_chisq]**2.0)
+            lo_err_for_chisq = flux_model_ext_conv < flux_fit_arr
+            chisq_lo = np.sum(
+                (flux_model_ext_conv[lo_err_for_chisq] - flux_fit_arr[lo_err_for_chisq])
+                ** 2.0
+                / errlo_fit_lin_arr[lo_err_for_chisq] ** 2.0
+            )
 
-            chisq = (chisq_up+chisq_lo)/float(nfit)
+            chisq = (chisq_up + chisq_lo) / float(nfit)
 
-            nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30]) #updating the number of points considered to be upper limits
-            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+            nfit_nonlimit = len(
+                errup_fit_lin_arr[errup_fit_lin_arr != self.flux_array]
+            )  # updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq * float(nfit) / float(nfit_nonlimit)
 
-        return [chisq,chisq_nonlimit]
+        return [chisq, chisq_nonlimit]
 
-    #chisq function to use with minimise (note change of inputs w.r.t. chisq)
-    def chisq_to_minimize(self,av,flux_model):
-        '''
+    # chisq function to use with minimise (note change of inputs w.r.t. chisq)
+    def chisq_to_minimize(self, av, flux_model):
+        """
         chisq function to be used with scipy.optmize.minimize function.
         Note the slight change in sysntax from chisq() function above.
         In short it is exactly the same, but the parameters are called in a different order.
-        '''
+        """
 
         treat_errors = self.treat_errors
 
-        if treat_errors=='log':
-            #preparing the fluxes and errors in log space
-            flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
-            percentage_error = self.err_flux_array/self.flux_array
-            errup_fit_log_arr=np.log10(1.+percentage_error,dtype=np.float64)# this is absolute error in log space
-            errlo_fit_log_arr=-np.log10(1.-percentage_error,dtype=np.float64)# note 100% error means a infinite lower error in log
+        if treat_errors == "log":
+            # preparing the fluxes and errors in log space
+            flux_fit_log_arr = np.log10(self.flux_array, dtype=np.float64)
+            percentage_error = self.err_flux_array / self.flux_array
+            errup_fit_log_arr = np.log10(
+                1.0 + percentage_error, dtype=np.float64
+            )  # this is absolute error in log space
+            errlo_fit_log_arr = -np.log10(
+                1.0 - percentage_error, dtype=np.float64
+            )  # note 100% error means a infinite lower error in log
 
-            #these two lines are to avoid singularities in the case of error=0
-            errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
-            errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
+            # these two lines are to avoid singularities in the case of error=0
+            errup_fit_log_arr[errup_fit_log_arr == 0.0] = 1.0e-33
+            errlo_fit_log_arr[errlo_fit_log_arr == 0.0] = 1.0e-33
 
-            #this line is to avoid nan in log10(negative_value), we set it to very high number
-            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
+            # this line is to avoid nan in log10(negative_value), we set it to very high number
+            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)] = 1.0e33
 
-            nfit = len(self.upper_limit_array) #total number of points
-            errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-            errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            nfit = len(self.upper_limit_array)  # total number of points
+            errup_fit_log_arr[self.upper_limit_array] = (
+                1.0e33  # set upper limit errors to very high value
+            )
+            errlo_fit_log_arr[self.upper_limit_array] = (
+                1.0e33  # set lower limit errors to very high value
+            )
 
-            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            flux_model_ext_conv = self.sed_extinction(
+                flux_model, av
+            )  # extincted and then convoluted
 
-            up_err_for_chisq = flux_model_ext_conv>=flux_fit_log_arr
-            percentage_error_up = self.err_flux_array[up_err_for_chisq]/self.flux_array[up_err_for_chisq]
-            errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
-            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0\
-                              /errup_fit_log_arr[up_err_for_chisq]**2.0)
+            up_err_for_chisq = flux_model_ext_conv >= flux_fit_log_arr
+            percentage_error_up = (
+                self.err_flux_array[up_err_for_chisq]
+                / self.flux_array[up_err_for_chisq]
+            )
+            errup_fit_log_arr[up_err_for_chisq] = np.log10(
+                1.0 + percentage_error_up, dtype=np.float64
+            )
+            chisq_up = np.sum(
+                (
+                    flux_model_ext_conv[up_err_for_chisq]
+                    - flux_fit_log_arr[up_err_for_chisq]
+                )
+                ** 2.0
+                / errup_fit_log_arr[up_err_for_chisq] ** 2.0
+            )
 
-            lo_err_for_chisq = flux_model_ext_conv<flux_fit_log_arr
-            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0\
-                              /errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+            lo_err_for_chisq = flux_model_ext_conv < flux_fit_log_arr
+            chisq_lo = np.sum(
+                (
+                    flux_model_ext_conv[lo_err_for_chisq]
+                    - flux_fit_log_arr[lo_err_for_chisq]
+                )
+                ** 2.0
+                / errlo_fit_log_arr[lo_err_for_chisq] ** 2.0
+            )
 
-            chisq = (chisq_up+chisq_lo)/float(nfit)
+            chisq = (chisq_up + chisq_lo) / float(nfit)
 
-            nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30]) #updating the number of points considered to be upper limits
-            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+            nfit_nonlimit = len(
+                errup_fit_log_arr[errup_fit_log_arr < 1.0e30]
+            )  # updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq * float(nfit) / float(nfit_nonlimit)
 
         else:
-            #preparing the fluxes and errors in linear space
-            flux_fit_arr=self.flux_array
+            # preparing the fluxes and errors in linear space
+            flux_fit_arr = self.flux_array
             linear_err = copy.deepcopy(self.err_flux_array)
-            errup_fit_lin_arr=linear_err# this is absolute error in linear space
-            errlo_fit_lin_arr=linear_err# this is absolute error in linear space
+            errup_fit_lin_arr = linear_err  # this is absolute error in linear space
+            errlo_fit_lin_arr = linear_err  # this is absolute error in linear space
 
-            nfit = len(self.upper_limit_array) #total number of points
-            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set upper limit errors to flux value
-            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set lower limit errors to flux value
+            nfit = len(self.upper_limit_array)  # total number of points
+            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[
+                self.upper_limit_array
+            ]  # set upper limit errors to flux value
+            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[
+                self.upper_limit_array
+            ]  # set lower limit errors to flux value
 
-            #these two lines are to avoid singularities in the case of error=0
-            errup_fit_lin_arr[errup_fit_lin_arr==0.0]=1.0e-33
-            errlo_fit_lin_arr[errlo_fit_lin_arr==0.0]=1.0e-33
+            # these two lines are to avoid singularities in the case of error=0
+            errup_fit_lin_arr[errup_fit_lin_arr == 0.0] = 1.0e-33
+            errlo_fit_lin_arr[errlo_fit_lin_arr == 0.0] = 1.0e-33
 
-            flux_model_ext_conv = self.sed_extinction(flux_model,av) #extincted and then convoluted
+            flux_model_ext_conv = self.sed_extinction(
+                flux_model, av
+            )  # extincted and then convoluted
 
-            up_err_for_chisq = flux_model_ext_conv>=flux_fit_arr
+            up_err_for_chisq = flux_model_ext_conv >= flux_fit_arr
             errup_fit_lin_arr[up_err_for_chisq] = self.err_flux_array[up_err_for_chisq]
-            chisq_up = np.sum((flux_model_ext_conv[up_err_for_chisq]-flux_fit_arr[up_err_for_chisq])**2.0\
-                              /errup_fit_lin_arr[up_err_for_chisq]**2.0)
+            chisq_up = np.sum(
+                (flux_model_ext_conv[up_err_for_chisq] - flux_fit_arr[up_err_for_chisq])
+                ** 2.0
+                / errup_fit_lin_arr[up_err_for_chisq] ** 2.0
+            )
 
-            lo_err_for_chisq = flux_model_ext_conv<flux_fit_arr
-            chisq_lo = np.sum((flux_model_ext_conv[lo_err_for_chisq]-flux_fit_arr[lo_err_for_chisq])**2.0\
-                              /errlo_fit_lin_arr[lo_err_for_chisq]**2.0)
+            lo_err_for_chisq = flux_model_ext_conv < flux_fit_arr
+            chisq_lo = np.sum(
+                (flux_model_ext_conv[lo_err_for_chisq] - flux_fit_arr[lo_err_for_chisq])
+                ** 2.0
+                / errlo_fit_lin_arr[lo_err_for_chisq] ** 2.0
+            )
 
-            chisq = (chisq_up+chisq_lo)/float(nfit)
+            chisq = (chisq_up + chisq_lo) / float(nfit)
 
-            nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30]) #updating the number of points considered to be upper limits
-            chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
-
+            nfit_nonlimit = len(
+                errup_fit_lin_arr[errup_fit_lin_arr != self.flux_array]
+            )  # updating the number of points considered to be upper limits
+            chisq_nonlimit = chisq * float(nfit) / float(nfit_nonlimit)
 
         return chisq
-    
-    def sed_fit(self,dist,AV_min=0.0,AV_max=1000,method='minimize',progress=True,avopt=0):
-        #TODO: write proper function description.
-        '''
+
+    def sed_fit(
+        self, dist, AV_min=0.0, AV_max=1000, method="minimize", progress=True, avopt=0
+    ):
+        # TODO: write proper function description.
+        """
         Fits the SED observations to the Z&T18 set of models
 
         Parameters
@@ -2204,10 +3208,10 @@ class SedFitter(object):
             and calculates the chi square as define in Z&T18 (See also De Buizer et al. 2017).
             'idl' is a translation of the IDL version that also performs a grid search,
             it keeps the compatibility with the previous version using the same constants and fits files.
-        
+
         progress: bool
             progress bar either True or False.
-            
+
         avopt: int
             This is only relevant when choosing method = 'idl'. It sets the visual extunction option.
             0 is equally distributed AV point in the range of (0,AV_max)
@@ -2217,358 +3221,665 @@ class SedFitter(object):
         Returns
         ----------
         FitterContainer: class with needed information to use the functions.
-        '''
+        """
 
-        if method not in ('grid_search', 'idl', 'minimize'):
-            raise ValueError("'method' must be either 'minimize', 'grid_search' or 'idl'")
-        
-        if method=='idl':
-            treat_errors = 'log'
-        if method=='minimize':
-            treat_errors = 'linear'
-        if method=='grid_search':
-            treat_errors = 'linear'
-        
-        #TODO: delete this
-#         if treat_errors not in ('log', 'linear'):
-#             raise ValueError("'treat_errors' must be either 'log' or 'linear'")
-        
+        if method not in ("grid_search", "idl", "minimize"):
+            raise ValueError(
+                "'method' must be either 'minimize', 'grid_search' or 'idl'"
+            )
+
+        if method == "idl":
+            treat_errors = "log"
+        if method == "minimize":
+            treat_errors = "linear"
+        if method == "grid_search":
+            treat_errors = "linear"
+
+        # TODO: delete this
+        #         if treat_errors not in ('log', 'linear'):
+        #             raise ValueError("'treat_errors' must be either 'log' or 'linear'")
+
         self.dist = dist
         self.treat_errors = treat_errors
 
-        #Creating the AV array, simply from AV_min to AV_max in steps of 1
-        if AV_min<0:
+        # Creating the AV array, simply from AV_min to AV_max in steps of 1
+        if AV_min < 0:
             raise ValueError("AV_min must be greater or equal than 0.0")
-        AV_array = np.arange(AV_min,AV_max+1.0,1.0)
+        AV_array = np.arange(AV_min, AV_max + 1.0, 1.0)
 
-        #loading here SED model files, extinction law, default parameters
+        # loading here SED model files, extinction law, default parameters
         norm_extc_law = self.extc_law
         MODEL_DATA, MODEL_IDX = self.model_data
         master_dir = self.master_dir
         default_filters_table = self.default_filters
-        filter_name = default_filters_table['filter']
-        filter_wavelength = default_filters_table['wavelength']
+        filter_name = default_filters_table["filter"]
+        filter_wavelength = default_filters_table["wavelength"]
 
         filter_idx = []
         for filter_value in self.filter_array:
             try:
-                filter_idx.append(np.where(filter_name==filter_value)[0][0])
+                filter_idx.append(np.where(filter_name == filter_value)[0][0])
             except:
-                raise ValueError("The filter", filter_value, "is not in dabatase, please add it")
+                raise ValueError(
+                    "The filter", filter_value, "is not in dabatase, please add it"
+                )
 
-        self.lambda_array_model = filter_wavelength[filter_idx] #this is use for the convolution
+        self.lambda_array_model = filter_wavelength[
+            filter_idx
+        ]  # this is use for the convolution
         filter_array_model = filter_name[filter_idx]
 
-        #load the filters lambda and responses to make the convolution
+        # load the filters lambda and responses to make the convolution
         FILTER_wave_resp = []
         for filter_NAME in filter_array_model:
-            filter_file = np.loadtxt(master_dir+'/Model_SEDs/parfiles/'+filter_NAME+'.txt',unpack=True)
+            filter_file = np.loadtxt(
+                master_dir + "/Model_SEDs/parfiles/" + filter_NAME + ".txt", unpack=True
+            )
             fwave = filter_file[0]
             fresponse = filter_file[1]
 
-            fnu=c_micron_s/fwave
-            nf=len(fnu)
+            fnu = c_micron_s / fwave
+            nf = len(fnu)
 
             if fnu[0] > fnu[1]:
-                fnu=fnu[::-1]
-                fresponse=fresponse[::-1]
+                fnu = fnu[::-1]
+                fresponse = fresponse[::-1]
 
-            dfnu=fnu[1:nf-1]-fnu[0:nf-2]
-            fint=np.sum(0.5*(fresponse[0:nf-2]+fresponse[1:nf-1])*dfnu)
-            fresponse=fresponse[1:nf-1]/fint
-            fwave=fwave[1:nf-1]
+            dfnu = fnu[1 : nf - 1] - fnu[0 : nf - 2]
+            fint = np.sum(0.5 * (fresponse[0 : nf - 2] + fresponse[1 : nf - 1]) * dfnu)
+            fresponse = fresponse[1 : nf - 1] / fint
+            fwave = fwave[1 : nf - 1]
 
-            FILTER_wave_resp.append([fwave,fresponse,dfnu])
+            FILTER_wave_resp.append([fwave, fresponse, dfnu])
         self.FILTER_wave_resp = FILTER_wave_resp
-
 
         FULL_MODEL = []
 
-        if treat_errors=='log':
-            #preparing the fluxes and errors in log space
-            flux_fit_log_arr=np.log10(self.flux_array,dtype=np.float64)
+        if treat_errors == "log":
+            # preparing the fluxes and errors in log space
+            flux_fit_log_arr = np.log10(self.flux_array, dtype=np.float64)
 
-            percentage_error = self.err_flux_array/self.flux_array
-            errup_fit_log_arr=np.log10(1.+percentage_error,dtype=np.float64)# this is absolute error in log space
-            errlo_fit_log_arr=-np.log10(1.-percentage_error,dtype=np.float64)# note 100% error means a infinite lower error in log
-            
-            #these two lines are to avoid singularities in the case of error=0
-            errup_fit_log_arr[errup_fit_log_arr==0.0]=1.0e-33
-            errlo_fit_log_arr[errlo_fit_log_arr==0.0]=1.0e-33
+            percentage_error = self.err_flux_array / self.flux_array
+            errup_fit_log_arr = np.log10(
+                1.0 + percentage_error, dtype=np.float64
+            )  # this is absolute error in log space
+            errlo_fit_log_arr = -np.log10(
+                1.0 - percentage_error, dtype=np.float64
+            )  # note 100% error means a infinite lower error in log
 
-            #this line is to avoid nan in log10(negative_value), we set it to very high number
-            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)]=1.0e33
+            # these two lines are to avoid singularities in the case of error=0
+            errup_fit_log_arr[errup_fit_log_arr == 0.0] = 1.0e-33
+            errlo_fit_log_arr[errlo_fit_log_arr == 0.0] = 1.0e-33
 
-            errup_fit_log_arr[self.upper_limit_array] = 1.0e33 #set upper limit errors to very high value
-            errlo_fit_log_arr[self.upper_limit_array] = 1.0e33 #set lower limit errors to very high value
+            # this line is to avoid nan in log10(negative_value), we set it to very high number
+            errlo_fit_log_arr[np.isnan(errlo_fit_log_arr)] = 1.0e33
+
+            errup_fit_log_arr[self.upper_limit_array] = (
+                1.0e33  # set upper limit errors to very high value
+            )
+            errlo_fit_log_arr[self.upper_limit_array] = (
+                1.0e33  # set lower limit errors to very high value
+            )
 
         else:
-            #NOTE: We keep the same names as above even though they are linear now
-            #preparing the fluxes and errors in linear space
-            flux_fit_arr=self.flux_array
-            linear_err = copy.deepcopy(self.err_flux_array) #referencing different arrays in memory
-            errup_fit_lin_arr=linear_err# this is absolute error in linear space
-            errlo_fit_lin_arr=linear_err# this is absolute error in linear space
+            # NOTE: We keep the same names as above even though they are linear now
+            # preparing the fluxes and errors in linear space
+            flux_fit_arr = self.flux_array
+            linear_err = copy.deepcopy(
+                self.err_flux_array
+            )  # referencing different arrays in memory
+            errup_fit_lin_arr = linear_err  # this is absolute error in linear space
+            errlo_fit_lin_arr = linear_err  # this is absolute error in linear space
 
-            #these two lines are to avoid singularities in the case of error=0
-            errup_fit_lin_arr[errup_fit_lin_arr==0.0]=1.0e-33
-            errlo_fit_lin_arr[errlo_fit_lin_arr==0.0]=1.0e-33
-            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set upper limit errors to flux value
-            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[self.upper_limit_array] #set lower limit errors to flux value
+            # these two lines are to avoid singularities in the case of error=0
+            errup_fit_lin_arr[errup_fit_lin_arr == 0.0] = 1.0e-33
+            errlo_fit_lin_arr[errlo_fit_lin_arr == 0.0] = 1.0e-33
+            errup_fit_lin_arr[self.upper_limit_array] = self.flux_array[
+                self.upper_limit_array
+            ]  # set upper limit errors to flux value
+            errlo_fit_lin_arr[self.upper_limit_array] = self.flux_array[
+                self.upper_limit_array
+            ]  # set lower limit errors to flux value
 
+        nfit = len(self.upper_limit_array)  # total number of points
 
-        nfit = len(self.upper_limit_array) #total number of points
-
-        if method == 'minimize':
-            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA),disable= not progress):
-                sed_model = np.loadtxt(master_dir+'/Model_SEDs/sed/'+model_data,unpack=True)
-                self.sed_lambda_model = sed_model[0] #micron
+        if method == "minimize":
+            for model_data, model_idx in tqdm(
+                zip(MODEL_DATA, MODEL_IDX), total=len(MODEL_DATA), disable=not progress
+            ):
+                sed_model = np.loadtxt(
+                    master_dir + "/Model_SEDs/sed/" + model_data, unpack=True
+                )
+                self.sed_lambda_model = sed_model[0]  # micron
                 sed_flux_model = sed_model[1]
 
-                fnorm=1.0/(4.0*np.pi)/self.dist**2/pc2cm/pc2cm*Lsun2erg_s
-                modelflux_arr1=sed_flux_model*fnorm # now in erg/s/cm^2. It was in Lsun
-                flux_model_Jy=modelflux_arr1/c_micron_s*self.sed_lambda_model/Jy2erg_s_cm2# now in Jy
+                fnorm = 1.0 / (4.0 * np.pi) / self.dist**2 / pc2cm / pc2cm * Lsun2erg_s
+                modelflux_arr1 = (
+                    sed_flux_model * fnorm
+                )  # now in erg/s/cm^2. It was in Lsun
+                flux_model_Jy = (
+                    modelflux_arr1 / c_micron_s * self.sed_lambda_model / Jy2erg_s_cm2
+                )  # now in Jy
 
-                if treat_errors=='log':
-                    flux_model_Jy_log=np.log10(flux_model_Jy,dtype=np.float64)
+                if treat_errors == "log":
+                    flux_model_Jy_log = np.log10(flux_model_Jy, dtype=np.float64)
 
-                    #TEMPORARY FIX TO AVOID CURVE FIT TO DIE
-                    flux_model_Jy_log[flux_model_Jy_log==np.inf]=1.0e33
-                    flux_model_Jy_log[flux_model_Jy_log==-np.inf]=1.0e-33
+                    # TEMPORARY FIX TO AVOID CURVE FIT TO DIE
+                    flux_model_Jy_log[flux_model_Jy_log == np.inf] = 1.0e33
+                    flux_model_Jy_log[flux_model_Jy_log == -np.inf] = 1.0e-33
 
-                    #fitting the best av for each model (8640)
-                    result = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy_log),
-                                      bounds=Bounds(AV_min,AV_max))
+                    # fitting the best av for each model (8640)
+                    result = minimize(
+                        self.chisq_to_minimize,
+                        x0=np.array([AV_max / 2.0]),
+                        args=(flux_model_Jy_log),
+                        bounds=Bounds(AV_min, AV_max),
+                    )
 
-                    chisq,chisq_nonlimit = self.chisq(flux_model_Jy_log,result.x[0])
+                    chisq, chisq_nonlimit = self.chisq(flux_model_Jy_log, result.x[0])
 
-                    FULL_MODEL.append(model_idx+[result.x[0],chisq,chisq_nonlimit])
+                    FULL_MODEL.append(model_idx + [result.x[0], chisq, chisq_nonlimit])
 
                 else:
-                    #fitting the best av for each model (8640)
-                    result = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy),
-                                      bounds=Bounds(AV_min,AV_max))
+                    # ORIGNAL VERSION
+                    # fitting the best av for each model (8640)
+                    result = minimize(
+                        self.chisq_to_minimize,
+                        x0=np.array([AV_max / 2.0]),
+                        args=(flux_model_Jy),
+                        bounds=Bounds(AV_min, AV_max),
+                    )
 
-                    chisq,chisq_nonlimit = self.chisq(flux_model_Jy,result.x[0])
+                    chisq, chisq_nonlimit = self.chisq(flux_model_Jy, result.x[0])
 
-                    FULL_MODEL.append(model_idx+[result.x[0],chisq,chisq_nonlimit])
+                    FULL_MODEL.append(model_idx + [result.x[0], chisq, chisq_nonlimit])
 
-        elif method == 'grid_search':
-            for model_data,model_idx in tqdm(zip(MODEL_DATA,MODEL_IDX),total=len(MODEL_DATA),disable=not progress):
-                sed_model = np.loadtxt(master_dir+'/Model_SEDs/sed/'+model_data,unpack=True)
-                self.sed_lambda_model = sed_model[0] #micron
+        # TEST IN V10
+        # fitting the best av for each model (8640)
+        #                     chisq1,chisq2,chisq3 = np.inf,np.inf,np.inf
+        #                     chisq_nonlimit1,chisq_nonlimit2,chisq_nonlimit3 = np.inf,np.inf,np.inf
+        #                     result1,result2,result3 = np.inf,np.inf,np.inf
+
+        #                     result1 = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy),
+        #                                       bounds=Bounds(AV_min,AV_max))
+        #                     chisq1,chisq_nonlimit1 = self.chisq(flux_model_Jy,result1.x[0])
+
+        #                     if np.abs(result1.x[0]-AV_max/2.0)<10 or np.abs(result1.x[0]-AV_max)<10:
+        #                         result2 = minimize(self.chisq_to_minimize,x0=np.array([AV_max/4.0]),args=(flux_model_Jy),
+        #                                           bounds=Bounds(AV_min,AV_max/2.0))
+        #                         chisq2,chisq_nonlimit2 = self.chisq(flux_model_Jy,result2.x[0])
+
+        #                         if np.abs(result2.x[0]-AV_max/2.0)<10 or np.abs(result2.x[0]-AV_max)<10:
+        #                             result3 = minimize(self.chisq_to_minimize,x0=np.array([AV_max/8.0]),args=(flux_model_Jy),
+        #                                               bounds=Bounds(AV_min,AV_max/4.0))
+        #                             chisq3,chisq_nonlimit3 = self.chisq(flux_model_Jy,result3.x[0])
+
+        #                     chisq_arr = np.array([chisq1,chisq2,chisq3])
+        #                     chisq_nonlim_arr = np.array([chisq_nonlimit1,chisq_nonlimit2,chisq_nonlimit3])
+        #                     results_arr = np.array([result1,result2,result3])
+
+        #                     best_chisq_idx = np.where(chisq_nonlim_arr==np.min(chisq_nonlim_arr))[0]
+        #                     best_result = results_arr[best_chisq_idx]
+
+        #                     FULL_MODEL.append(model_idx+[best_result[0].x[0],
+        #                                                  chisq_arr[best_chisq_idx][0],
+        #                                                  chisq_nonlim_arr[best_chisq_idx][0]])
+
+        elif method == "grid_search":
+            for model_data, model_idx in tqdm(
+                zip(MODEL_DATA, MODEL_IDX), total=len(MODEL_DATA), disable=not progress
+            ):
+                sed_model = np.loadtxt(
+                    master_dir + "/Model_SEDs/sed/" + model_data, unpack=True
+                )
+                self.sed_lambda_model = sed_model[0]  # micron
                 sed_flux_model = sed_model[1]
 
-                fnorm=1.0/(4.0*np.pi)/self.dist**2/pc2cm/pc2cm*Lsun2erg_s
-                modelflux_arr1=sed_flux_model*fnorm # now in erg/s/cm^2. It was in Lsun
-                flux_model_Jy=modelflux_arr1/c_micron_s*self.sed_lambda_model/Jy2erg_s_cm2# now in Jy
+                fnorm = 1.0 / (4.0 * np.pi) / self.dist**2 / pc2cm / pc2cm * Lsun2erg_s
+                modelflux_arr1 = (
+                    sed_flux_model * fnorm
+                )  # now in erg/s/cm^2. It was in Lsun
+                flux_model_Jy = (
+                    modelflux_arr1 / c_micron_s * self.sed_lambda_model / Jy2erg_s_cm2
+                )  # now in Jy
 
-                if treat_errors=='log':
-                    flux_model_Jy_log=np.log10(flux_model_Jy,dtype=np.float64)
+                if treat_errors == "log":
+                    flux_model_Jy_log = np.log10(flux_model_Jy, dtype=np.float64)
 
-                    #TEMPORARY FIX TO AVOID CURVE FIT TO DIE
-                    flux_model_Jy_log[flux_model_Jy_log==np.inf]=1.0e33
-                    flux_model_Jy_log[flux_model_Jy_log==-np.inf]=1.0e-33
+                    # TEMPORARY FIX TO AVOID CURVE FIT TO DIE
+                    flux_model_Jy_log[flux_model_Jy_log == np.inf] = 1.0e33
+                    flux_model_Jy_log[flux_model_Jy_log == -np.inf] = 1.0e-33
 
                     for av in AV_array:
-                        #extincting the model flux using the av value from AV_array
-                        #and the normalised (in Vband) extc_law
-                        flux_model_Jy_log_extincted = flux_model_Jy_log-0.4*av*norm_extc_law
+                        # extincting the model flux using the av value from AV_array
+                        # and the normalised (in Vband) extc_law
+                        flux_model_Jy_log_extincted = (
+                            flux_model_Jy_log - 0.4 * av * norm_extc_law
+                        )
 
-                        flux_model_Jy_extincted_log_CONV = self.sed_convolution(FILTER_wave_resp,
-                                                                                self.lambda_array_model,self.sed_lambda_model,
-                                                                                flux_model_Jy_log_extincted)
+                        flux_model_Jy_extincted_log_CONV = self.sed_convolution(
+                            FILTER_wave_resp,
+                            self.lambda_array_model,
+                            self.sed_lambda_model,
+                            flux_model_Jy_log_extincted,
+                        )
 
-                        #preliminar consideration of low and up errors
-                        up_err_for_chisq = flux_model_Jy_extincted_log_CONV>=flux_fit_log_arr
-                        percentage_error_up = self.err_flux_array[up_err_for_chisq]/self.flux_array[up_err_for_chisq]
-                        errup_fit_log_arr[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
-                        chisq_up = np.sum((flux_model_Jy_extincted_log_CONV[up_err_for_chisq]-flux_fit_log_arr[up_err_for_chisq])**2.0\
-                                          /errup_fit_log_arr[up_err_for_chisq]**2.0)
+                        # preliminar consideration of low and up errors
+                        up_err_for_chisq = (
+                            flux_model_Jy_extincted_log_CONV >= flux_fit_log_arr
+                        )
+                        percentage_error_up = (
+                            self.err_flux_array[up_err_for_chisq]
+                            / self.flux_array[up_err_for_chisq]
+                        )
+                        errup_fit_log_arr[up_err_for_chisq] = np.log10(
+                            1.0 + percentage_error_up, dtype=np.float64
+                        )
+                        chisq_up = np.sum(
+                            (
+                                flux_model_Jy_extincted_log_CONV[up_err_for_chisq]
+                                - flux_fit_log_arr[up_err_for_chisq]
+                            )
+                            ** 2.0
+                            / errup_fit_log_arr[up_err_for_chisq] ** 2.0
+                        )
 
-                        lo_err_for_chisq = flux_model_Jy_extincted_log_CONV<flux_fit_log_arr
-                        chisq_lo = np.sum((flux_model_Jy_extincted_log_CONV[lo_err_for_chisq]-flux_fit_log_arr[lo_err_for_chisq])**2.0
-                                          /errlo_fit_log_arr[lo_err_for_chisq]**2.0)
+                        lo_err_for_chisq = (
+                            flux_model_Jy_extincted_log_CONV < flux_fit_log_arr
+                        )
+                        chisq_lo = np.sum(
+                            (
+                                flux_model_Jy_extincted_log_CONV[lo_err_for_chisq]
+                                - flux_fit_log_arr[lo_err_for_chisq]
+                            )
+                            ** 2.0
+                            / errlo_fit_log_arr[lo_err_for_chisq] ** 2.0
+                        )
 
-                        chisq = (chisq_up+chisq_lo)/float(nfit)
+                        chisq = (chisq_up + chisq_lo) / float(nfit)
 
-                        nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30])
-                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+                        nfit_nonlimit = len(
+                            errup_fit_log_arr[errup_fit_log_arr < 1.0e30]
+                        )
+                        chisq_nonlimit = chisq * float(nfit) / float(nfit_nonlimit)
 
-
-                        FULL_MODEL.append(model_idx+[av,chisq,chisq_nonlimit])
+                        FULL_MODEL.append(model_idx + [av, chisq, chisq_nonlimit])
 
                 else:
                     for av in AV_array:
-                        #extincting the model flux using the av value from AV_array
-                        #and the normalised (in Vband) extc_law
-                        flux_model_Jy_extincted = flux_model_Jy*10**(-0.4*av*norm_extc_law)
+                        # extincting the model flux using the av value from AV_array
+                        # and the normalised (in Vband) extc_law
+                        flux_model_Jy_extincted = flux_model_Jy * 10 ** (
+                            -0.4 * av * norm_extc_law
+                        )
 
-                        flux_model_Jy_extincted_CONV = self.sed_convolution(FILTER_wave_resp,
-                                                                            self.lambda_array_model,self.sed_lambda_model,
-                                                                            flux_model_Jy_extincted)
+                        flux_model_Jy_extincted_CONV = self.sed_convolution(
+                            FILTER_wave_resp,
+                            self.lambda_array_model,
+                            self.sed_lambda_model,
+                            flux_model_Jy_extincted,
+                        )
 
-                        #preliminar consideration of low and up errors
-                        up_err_for_chisq = flux_model_Jy_extincted_CONV>=flux_fit_arr
-                        errup_fit_lin_arr[up_err_for_chisq] = self.err_flux_array[up_err_for_chisq]
-                        chisq_up = np.sum((flux_model_Jy_extincted_CONV[up_err_for_chisq]-flux_fit_arr[up_err_for_chisq])**2.0\
-                                          /errup_fit_lin_arr[up_err_for_chisq]**2.0)
+                        # preliminar consideration of low and up errors
+                        up_err_for_chisq = flux_model_Jy_extincted_CONV >= flux_fit_arr
+                        errup_fit_lin_arr[up_err_for_chisq] = self.err_flux_array[
+                            up_err_for_chisq
+                        ]
+                        chisq_up = np.sum(
+                            (
+                                flux_model_Jy_extincted_CONV[up_err_for_chisq]
+                                - flux_fit_arr[up_err_for_chisq]
+                            )
+                            ** 2.0
+                            / errup_fit_lin_arr[up_err_for_chisq] ** 2.0
+                        )
 
-                        lo_err_for_chisq = flux_model_Jy_extincted_CONV<flux_fit_arr
-                        chisq_lo = np.sum((flux_model_Jy_extincted_CONV[lo_err_for_chisq]-flux_fit_arr[lo_err_for_chisq])**2.0\
-                                          /errlo_fit_lin_arr[lo_err_for_chisq]**2.0)
+                        lo_err_for_chisq = flux_model_Jy_extincted_CONV < flux_fit_arr
+                        chisq_lo = np.sum(
+                            (
+                                flux_model_Jy_extincted_CONV[lo_err_for_chisq]
+                                - flux_fit_arr[lo_err_for_chisq]
+                            )
+                            ** 2.0
+                            / errlo_fit_lin_arr[lo_err_for_chisq] ** 2.0
+                        )
 
+                        chisq = (chisq_up + chisq_lo) / float(nfit)
 
-                        chisq = (chisq_up+chisq_lo)/float(nfit)
+                        nfit_nonlimit = len(
+                            errup_fit_lin_arr[errup_fit_lin_arr != self.flux_array]
+                        )
+                        chisq_nonlimit = chisq * float(nfit) / float(nfit_nonlimit)
 
-                        nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30])
-                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+                        FULL_MODEL.append(model_idx + [av, chisq, chisq_nonlimit])
 
-
-                        FULL_MODEL.append(model_idx+[av,chisq,chisq_nonlimit])
-
-        elif method == 'idl':
-            #load the opacities and interpolate in the range of model wavelength
-            par_test = np.loadtxt(master_dir+'/Model_SEDs/parfiles/kmh.par',unpack=True)
+        elif method == "idl":
+            # load the opacities and interpolate in the range of model wavelength
+            par_test = np.loadtxt(
+                master_dir + "/Model_SEDs/parfiles/kmh.par", unpack=True
+            )
 
             klam = par_test[0]
             kkap = par_test[3]
 
-            fits_path = master_dir+'/Model_SEDs/flux_filt/'
+            fits_path = master_dir + "/Model_SEDs/flux_filt/"
 
-            nmc=15
-            mc_arr=np.array([10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0])
+            nmc = 15
+            mc_arr = np.array(
+                [
+                    10.0,
+                    20.0,
+                    30.0,
+                    40.0,
+                    50.0,
+                    60.0,
+                    80.0,
+                    100.0,
+                    120.0,
+                    160.0,
+                    200.0,
+                    240.0,
+                    320.0,
+                    400.0,
+                    480.0,
+                ]
+            )
 
-            nsigma=4
-            sigma_arr=np.array([0.1,0.316,1.0,3.16])
+            nsigma = 4
+            sigma_arr = np.array([0.1, 0.316, 1.0, 3.16])
 
-            nms=14
-            mstar_arr=np.array([0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0])
+            nms = 14
+            mstar_arr = np.array(
+                [
+                    0.5,
+                    1.0,
+                    2.0,
+                    4.0,
+                    8.0,
+                    12.0,
+                    16.0,
+                    24.0,
+                    32.0,
+                    48.0,
+                    64.0,
+                    96.0,
+                    128.0,
+                    160.0,
+                ]
+            )
 
-            nmu=20
-            mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
-            mu_arr=mu_arr[::-1] #reversing the array
-            theta_arr=np.arccos(mu_arr)/np.pi*180.0
+            nmu = 20
+            mu_arr = np.arange(float(nmu)) / float(nmu) + 1.0 / float(nmu) / 2.0
+            mu_arr = mu_arr[::-1]  # reversing the array
+            theta_arr = np.arccos(mu_arr) / np.pi * 180.0
 
-            #these are the constants used in the the IDL code. In the new python version more accurate ones are used
-            pc=3.0857e18
-            lsun=3.845e33
-            mH=1.6733e-24
-            clight=2.9979e14
+            # these are the constants used in the the IDL code. In the new python version more accurate ones are used
+            pc = 3.0857e18
+            lsun = 3.845e33
+            mH = 1.6733e-24
+            clight = 2.9979e14
 
-            for mc in tqdm(range(nmc),disable=not progress):
+            for mc in tqdm(range(nmc), disable=not progress):
                 for sigma in range(nsigma):
                     if avopt:
-                        av_clump = sigma/1.6733e-24/1.8e21/2.0
-                        av_min=0.0
-                        av_max=av_clump*5.0
-                        av_arr=av_min+np.arange(AV_max)/float(AV_max-1.0)*(av_max-av_min)
+                        av_clump = sigma / 1.6733e-24 / 1.8e21 / 2.0
+                        av_min = 0.0
+                        av_max = av_clump * 5.0
+                        av_arr = av_min + np.arange(AV_max) / float(AV_max - 1.0) * (
+                            av_max - av_min
+                        )
                     else:
-                        av_min=0.0
+                        av_min = 0.0
                         av_max = AV_max
-                        av_arr=av_min+np.arange(AV_max)/float(AV_max-1)*(av_max-av_min) #like idl
+                        av_arr = av_min + np.arange(AV_max) / float(AV_max - 1) * (
+                            av_max - av_min
+                        )  # like idl
                     for ms in range(nms):
                         for mu in range(nmu):
                             filt_conv = []
                             for filter_NAME in filter_array_model:
-                                test_fits = pyfits.open(fits_path+filter_NAME+'.fits')#consider putting out of the loop
+                                test_fits = pyfits.open(
+                                    fits_path + filter_NAME + ".fits"
+                                )  # consider putting out of the loop
                                 filt_conv.append(test_fits[0].data[mu][ms][sigma][mc])
                             filt_conv = np.array(filt_conv)
-                            if all(filt_conv==0.0):
+                            if all(filt_conv == 0.0):
                                 continue
                             else:
-                                if treat_errors=='log':
-                                    filt_conv_idx = filt_conv > 0.0 #create boolean array to take only values >0
-                                    lambda_model = self.lambda_array[filt_conv_idx] #use basically the same lambda_Array
-                                    flux_fit_log_arr_gt0 = flux_fit_log_arr[filt_conv_idx]
-                                    err_flux_array_gt0 = self.err_flux_array[filt_conv_idx]
-                                    errup_fit_log_arr_gt0 = errup_fit_log_arr[filt_conv_idx]
-                                    errlo_fit_log_arr_gt0 = errlo_fit_log_arr[filt_conv_idx]
-                                    fnorm=1./(4.0*np.pi)/dist**2/pc/pc*lsun
-                                    modelflux_arr1=filt_conv[filt_conv_idx]*fnorm # now in erg/s/cm^2. it was in lsun
-                                    flux_model_Jy=modelflux_arr1/3.0e14*lambda_model*1.0e23 # now in Jy
+                                if treat_errors == "log":
+                                    filt_conv_idx = (
+                                        filt_conv > 0.0
+                                    )  # create boolean array to take only values >0
+                                    lambda_model = self.lambda_array[
+                                        filt_conv_idx
+                                    ]  # use basically the same lambda_Array
+                                    flux_fit_log_arr_gt0 = flux_fit_log_arr[
+                                        filt_conv_idx
+                                    ]
+                                    err_flux_array_gt0 = self.err_flux_array[
+                                        filt_conv_idx
+                                    ]
+                                    errup_fit_log_arr_gt0 = errup_fit_log_arr[
+                                        filt_conv_idx
+                                    ]
+                                    errlo_fit_log_arr_gt0 = errlo_fit_log_arr[
+                                        filt_conv_idx
+                                    ]
+                                    fnorm = (
+                                        1.0 / (4.0 * np.pi) / dist**2 / pc / pc * lsun
+                                    )
+                                    modelflux_arr1 = (
+                                        filt_conv[filt_conv_idx] * fnorm
+                                    )  # now in erg/s/cm^2. it was in lsun
+                                    flux_model_Jy = (
+                                        modelflux_arr1 / 3.0e14 * lambda_model * 1.0e23
+                                    )  # now in Jy
 
+                                    interp_kkap = np.interp(
+                                        lambda_model, klam, kkap
+                                    )  # in the whole vector
+                                    interp_kV = np.interp(
+                                        0.55, klam, kkap
+                                    )  # in the visible
 
-                                    interp_kkap = np.interp(lambda_model, klam, kkap)#in the whole vector
-                                    interp_kV = np.interp(0.55, klam, kkap)#in the visible
-
-                                    modelflux_fit_log=np.log10(flux_model_Jy,dtype=np.float64)
+                                    modelflux_fit_log = np.log10(
+                                        flux_model_Jy, dtype=np.float64
+                                    )
 
                                     for av in av_arr:
-                                        log_flux_model_Jy_extincted = modelflux_fit_log-0.4*av*interp_kkap/interp_kV
+                                        log_flux_model_Jy_extincted = (
+                                            modelflux_fit_log
+                                            - 0.4 * av * interp_kkap / interp_kV
+                                        )
 
-                                        #preliminar consideration of low and up errors
-                                        up_err_for_chisq = log_flux_model_Jy_extincted>=flux_fit_log_arr_gt0
-                                        #here considers some upper limits not to be upper limit
+                                        # preliminar consideration of low and up errors
+                                        up_err_for_chisq = (
+                                            log_flux_model_Jy_extincted
+                                            >= flux_fit_log_arr_gt0
+                                        )
+                                        # here considers some upper limits not to be upper limit
 
-                                        percentage_error_up = err_flux_array_gt0[up_err_for_chisq]/flux_fit_log_arr_gt0[up_err_for_chisq]
-                                        errup_fit_log_arr_gt0[up_err_for_chisq] = np.log10(1.0+percentage_error_up,dtype=np.float64)
-                                        chisq_up = np.sum((log_flux_model_Jy_extincted[up_err_for_chisq]-flux_fit_log_arr_gt0[up_err_for_chisq])**2.0\
-                                                          /errup_fit_log_arr_gt0[up_err_for_chisq]**2.0)
+                                        percentage_error_up = (
+                                            err_flux_array_gt0[up_err_for_chisq]
+                                            / flux_fit_log_arr_gt0[up_err_for_chisq]
+                                        )
+                                        errup_fit_log_arr_gt0[up_err_for_chisq] = (
+                                            np.log10(
+                                                1.0 + percentage_error_up,
+                                                dtype=np.float64,
+                                            )
+                                        )
+                                        chisq_up = np.sum(
+                                            (
+                                                log_flux_model_Jy_extincted[
+                                                    up_err_for_chisq
+                                                ]
+                                                - flux_fit_log_arr_gt0[up_err_for_chisq]
+                                            )
+                                            ** 2.0
+                                            / errup_fit_log_arr_gt0[up_err_for_chisq]
+                                            ** 2.0
+                                        )
 
-                                        lo_err_for_chisq = log_flux_model_Jy_extincted<flux_fit_log_arr_gt0
-                                        chisq_lo = np.sum((log_flux_model_Jy_extincted[lo_err_for_chisq]-flux_fit_log_arr_gt0[lo_err_for_chisq])**2.0\
-                                                          /errlo_fit_log_arr_gt0[lo_err_for_chisq]**2.0)
+                                        lo_err_for_chisq = (
+                                            log_flux_model_Jy_extincted
+                                            < flux_fit_log_arr_gt0
+                                        )
+                                        chisq_lo = np.sum(
+                                            (
+                                                log_flux_model_Jy_extincted[
+                                                    lo_err_for_chisq
+                                                ]
+                                                - flux_fit_log_arr_gt0[lo_err_for_chisq]
+                                            )
+                                            ** 2.0
+                                            / errlo_fit_log_arr_gt0[lo_err_for_chisq]
+                                            ** 2.0
+                                        )
 
                                         nfit = len(lambda_model)
-                                        chisq = (chisq_up+chisq_lo)/float(nfit)
+                                        chisq = (chisq_up + chisq_lo) / float(nfit)
 
-                                        nfit_nonlimit = len(errup_fit_log_arr[errup_fit_log_arr<1.0e30])
-                                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+                                        nfit_nonlimit = len(
+                                            errup_fit_log_arr[
+                                                errup_fit_log_arr < 1.0e30
+                                            ]
+                                        )
+                                        chisq_nonlimit = (
+                                            chisq * float(nfit) / float(nfit_nonlimit)
+                                        )
 
-                                        FULL_MODEL.append([mc+1,sigma+1,ms+1,mu+1,av,chisq,chisq_nonlimit])
+                                        FULL_MODEL.append(
+                                            [
+                                                mc + 1,
+                                                sigma + 1,
+                                                ms + 1,
+                                                mu + 1,
+                                                av,
+                                                chisq,
+                                                chisq_nonlimit,
+                                            ]
+                                        )
                                 else:
-                                    #NOTE: The name _log_ is kept even though is linear space
-                                    filt_conv_idx = filt_conv > 0.0 #create boolean array to take only values >0
-                                    lambda_model = self.lambda_array[filt_conv_idx] #use basically the same lambda_Array
+                                    # NOTE: The name _log_ is kept even though is linear space
+                                    filt_conv_idx = (
+                                        filt_conv > 0.0
+                                    )  # create boolean array to take only values >0
+                                    lambda_model = self.lambda_array[
+                                        filt_conv_idx
+                                    ]  # use basically the same lambda_Array
                                     flux_fit_arr_gt0 = flux_fit_arr[filt_conv_idx]
-                                    err_flux_array_gt0 = self.err_flux_array[filt_conv_idx]
-                                    errup_fit_lin_arr_gt0 = errup_fit_lin_arr[filt_conv_idx]
-                                    errlo_fit_lin_arr_gt0 = errlo_fit_lin_arr[filt_conv_idx]
-                                    fnorm=1./(4.0*np.pi)/dist**2/pc/pc*lsun
-                                    modelflux_arr1=filt_conv[filt_conv_idx]*fnorm # now in erg/s/cm^2. it was in lsun
-                                    flux_model_Jy=modelflux_arr1/3.0e14*lambda_model*1.0e23 # now in Jy
+                                    err_flux_array_gt0 = self.err_flux_array[
+                                        filt_conv_idx
+                                    ]
+                                    errup_fit_lin_arr_gt0 = errup_fit_lin_arr[
+                                        filt_conv_idx
+                                    ]
+                                    errlo_fit_lin_arr_gt0 = errlo_fit_lin_arr[
+                                        filt_conv_idx
+                                    ]
+                                    fnorm = (
+                                        1.0 / (4.0 * np.pi) / dist**2 / pc / pc * lsun
+                                    )
+                                    modelflux_arr1 = (
+                                        filt_conv[filt_conv_idx] * fnorm
+                                    )  # now in erg/s/cm^2. it was in lsun
+                                    flux_model_Jy = (
+                                        modelflux_arr1 / 3.0e14 * lambda_model * 1.0e23
+                                    )  # now in Jy
 
-                                    interp_kkap = np.interp(lambda_model, klam, kkap)#in the whole vector
-                                    interp_kV = np.interp(0.55, klam, kkap)#in the visible
+                                    interp_kkap = np.interp(
+                                        lambda_model, klam, kkap
+                                    )  # in the whole vector
+                                    interp_kV = np.interp(
+                                        0.55, klam, kkap
+                                    )  # in the visible
 
-                                    modelflux_fit_log=flux_model_Jy
+                                    modelflux_fit_log = flux_model_Jy
 
                                     for av in av_arr:
-                                        flux_model_Jy_extincted = flux_model_Jy*10**(-0.4*av*interp_kkap/interp_kV)
+                                        flux_model_Jy_extincted = (
+                                            flux_model_Jy
+                                            * 10
+                                            ** (-0.4 * av * interp_kkap / interp_kV)
+                                        )
 
-                                        #preliminar consideration of low and up errors
-                                        up_err_for_chisq = flux_model_Jy_extincted>=flux_fit_arr_gt0
-                                        #here considers some upper limits not to be upper limit
-                                        errup_fit_lin_arr_gt0[up_err_for_chisq] = err_flux_array_gt0[up_err_for_chisq]
-                                        chisq_up = np.sum((flux_model_Jy_extincted[up_err_for_chisq]-flux_fit_arr_gt0[up_err_for_chisq])**2.0\
-                                                          /errup_fit_lin_arr_gt0[up_err_for_chisq]**2.0)
+                                        # preliminar consideration of low and up errors
+                                        up_err_for_chisq = (
+                                            flux_model_Jy_extincted >= flux_fit_arr_gt0
+                                        )
+                                        # here considers some upper limits not to be upper limit
+                                        errup_fit_lin_arr_gt0[up_err_for_chisq] = (
+                                            err_flux_array_gt0[up_err_for_chisq]
+                                        )
+                                        chisq_up = np.sum(
+                                            (
+                                                flux_model_Jy_extincted[
+                                                    up_err_for_chisq
+                                                ]
+                                                - flux_fit_arr_gt0[up_err_for_chisq]
+                                            )
+                                            ** 2.0
+                                            / errup_fit_lin_arr_gt0[up_err_for_chisq]
+                                            ** 2.0
+                                        )
 
-                                        lo_err_for_chisq = flux_model_Jy_extincted<flux_fit_arr_gt0
-                                        chisq_lo = np.sum((flux_model_Jy_extincted[lo_err_for_chisq]-flux_fit_arr_gt0[lo_err_for_chisq])**2.0\
-                                                          /errlo_fit_lin_arr_gt0[lo_err_for_chisq]**2.0)
+                                        lo_err_for_chisq = (
+                                            flux_model_Jy_extincted < flux_fit_arr_gt0
+                                        )
+                                        chisq_lo = np.sum(
+                                            (
+                                                flux_model_Jy_extincted[
+                                                    lo_err_for_chisq
+                                                ]
+                                                - flux_fit_arr_gt0[lo_err_for_chisq]
+                                            )
+                                            ** 2.0
+                                            / errlo_fit_lin_arr_gt0[lo_err_for_chisq]
+                                            ** 2.0
+                                        )
 
                                         nfit = len(lambda_model)
-                                        chisq = (chisq_up+chisq_lo)/float(nfit)
+                                        chisq = (chisq_up + chisq_lo) / float(nfit)
 
-                                        nfit_nonlimit = len(errup_fit_lin_arr[errup_fit_lin_arr<1.0e30])
-                                        chisq_nonlimit = chisq*float(nfit)/float(nfit_nonlimit)
+                                        nfit_nonlimit = len(
+                                            errup_fit_lin_arr[
+                                                errup_fit_lin_arr != self.flux_array
+                                            ]
+                                        )
+                                        chisq_nonlimit = (
+                                            chisq * float(nfit) / float(nfit_nonlimit)
+                                        )
 
-                                        FULL_MODEL.append([mc+1,sigma+1,ms+1,mu+1,av,chisq,chisq_nonlimit])
+                                        FULL_MODEL.append(
+                                            [
+                                                mc + 1,
+                                                sigma + 1,
+                                                ms + 1,
+                                                mu + 1,
+                                                av,
+                                                chisq,
+                                                chisq_nonlimit,
+                                            ]
+                                        )
 
         FULL_MODEL = np.array(FULL_MODEL)
-        return FitterContainer(FULL_MODEL,master_dir = self.master_dir,
-                              extinction_law = self.extc_law,
-                              lambda_array = self.lambda_array,flux_array= self.flux_array,
-                              err_flux_array = self.err_flux_array,upper_limit_array = self.upper_limit_array,
-                              dist = self.dist)
+        return FitterContainer(
+            FULL_MODEL,
+            master_dir=self.master_dir,
+            extinction_law=self.extc_law,
+            lambda_array=self.lambda_array,
+            flux_array=self.flux_array,
+            err_flux_array=self.err_flux_array,
+            upper_limit_array=self.upper_limit_array,
+            dist=self.dist,
+        )
 
+    # TODO: Consider putting utilities in a class
+    # UTILITIES
 
-    #TODO: Consider putting utilities in a class
-    #UTILITIES
-
-    def add_filter(self,filter_name,instrument,lambda_array,response_array):
-        '''
+    def add_filter(self, filter_name, instrument, lambda_array, response_array):
+        """
         Adds an user defined filter to the database.
         It adds a txt file to the database with columns lambda_array and response_array.
         It also adds the fits file with the convolved fluxes for the use of the idl method.
@@ -2592,78 +3903,135 @@ class SedFitter(object):
         Returns
         ----------
         None
-        '''
+        """
 
         master_dir = self.master_dir
 
-        existing_filters = os.listdir(master_dir+'/Model_SEDs/parfiles/')
+        existing_filters = os.listdir(master_dir + "/Model_SEDs/parfiles/")
 
-        if filter_name+'.txt' in existing_filters:
-            print('WARNING! The filter ' + filter_name + ' already exists in the database')
+        if filter_name + ".txt" in existing_filters:
+            print(
+                "WARNING! The filter " + filter_name + " already exists in the database"
+            )
         else:
-            header0='Filter name '+filter_name+'\n'
-            header1='Instrument '+instrument+'\n'
-            header2='Central wavelength '+str(np.around(np.median(lambda_array),decimals=1))+' micron'+'\nwavelength(micron) response(arbitrary_units)'
-            HEADER = header0+header1+header2
-            np.savetxt(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt',
-                       list(zip(lambda_array,response_array)),header=HEADER,fmt='%.5e',delimiter=' ',newline='\n')
-            with open(master_dir+'/Model_SEDs/parfiles/filter_default.dat','ab') as filter_default:
-                np.savetxt(filter_default,[np.array([filter_name,np.around(np.median(lambda_array),decimals=1),instrument],dtype=str)],fmt='%s', delimiter=' ')
+            header0 = "Filter name " + filter_name + "\n"
+            header1 = "Instrument " + instrument + "\n"
+            header2 = (
+                "Central wavelength "
+                + str(np.around(np.median(lambda_array), decimals=1))
+                + " micron"
+                + "\nwavelength(micron) response(arbitrary_units)"
+            )
+            HEADER = header0 + header1 + header2
+            np.savetxt(
+                master_dir + "/Model_SEDs/parfiles/" + filter_name + ".txt",
+                list(zip(lambda_array, response_array)),
+                header=HEADER,
+                fmt="%.5e",
+                delimiter=" ",
+                newline="\n",
+            )
+            with open(
+                master_dir + "/Model_SEDs/parfiles/filter_default.dat", "ab"
+            ) as filter_default:
+                np.savetxt(
+                    filter_default,
+                    [
+                        np.array(
+                            [
+                                filter_name,
+                                np.around(np.median(lambda_array), decimals=1),
+                                instrument,
+                            ],
+                            dtype=str,
+                        )
+                    ],
+                    fmt="%s",
+                    delimiter=" ",
+                )
 
-            print(filter_name+'.txt succesfully saved in '+master_dir+'Model_SEDs/parfiles/')
+            print(
+                filter_name
+                + ".txt succesfully saved in "
+                + master_dir
+                + "Model_SEDs/parfiles/"
+            )
 
-        #For the IDL method we need the convolved fluxes for the new filter in a fits file
-        #(this is a translation from the IDL script filtflux.pro)
-        #Note that this is not needed for the new method as it convolves on the fly
-        existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
+        # For the IDL method we need the convolved fluxes for the new filter in a fits file
+        # (this is a translation from the IDL script filtflux.pro)
+        # Note that this is not needed for the new method as it convolves on the fly
+        existing_FITS_filters = os.listdir(master_dir + "/Model_SEDs/flux_filt/")
 
-        if filter_name+'.fits' in existing_FITS_filters:
-            print('WARNING! The filter file ' + filter_name + '.fits already exists in the database')
+        if filter_name + ".fits" in existing_FITS_filters:
+            print(
+                "WARNING! The filter file "
+                + filter_name
+                + ".fits already exists in the database"
+            )
         else:
-            nu_array = 3.0e14/lambda_array #keep consistency in constants
+            nu_array = 3.0e14 / lambda_array  # keep consistency in constants
             nf = len(nu_array)
             if nu_array[0] > nu_array[1]:
                 nu_array = nu_array[::-1]
                 response_array = response_array[::-1]
-            dfnu= nu_array[1:nf-1]-nu_array[0:nf-2]
-            fint=np.sum(0.5*(response_array[0:nf-2]+response_array[1:nf-1])*dfnu)
-            response_array=response_array[1:nf-1]/fint
-            lambda_array=lambda_array[1:nf-1]
+            dfnu = nu_array[1 : nf - 1] - nu_array[0 : nf - 2]
+            fint = np.sum(
+                0.5 * (response_array[0 : nf - 2] + response_array[1 : nf - 1]) * dfnu
+            )
+            response_array = response_array[1 : nf - 1] / fint
+            lambda_array = lambda_array[1 : nf - 1]
 
-            nmc=15
-            nsigma=4
-            nms=14
-            nmu=20
+            nmc = 15
+            nsigma = 4
+            nms = 14
+            nmu = 20
 
-            flux_model_conv = np.zeros([nmu,nms,nsigma,nmc])
+            flux_model_conv = np.zeros([nmu, nms, nsigma, nmc])
 
-            sed_list = os.listdir(master_dir+'/Model_SEDs/sed/')
+            sed_list = os.listdir(master_dir + "/Model_SEDs/sed/")
 
-            for imc in range(1,nmc+1,1):
-                for isigma in range(1,nsigma+1,1):
-                    for ims in range(1,nms+1,1):
-                        for imu in range(1,nmu+1,1):
-                            sed_file = '{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}'.format(int(imc),int(isigma),
-                                                                                    int(ims),int(imu))+'.dat'
+            for imc in range(1, nmc + 1, 1):
+                for isigma in range(1, nsigma + 1, 1):
+                    for ims in range(1, nms + 1, 1):
+                        for imu in range(1, nmu + 1, 1):
+                            sed_file = (
+                                "{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}".format(
+                                    int(imc), int(isigma), int(ims), int(imu)
+                                )
+                                + ".dat"
+                            )
                             if sed_file in sed_list:
-                                sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+sed_file,unpack=True)
+                                sed = np.loadtxt(
+                                    master_dir + "/Model_SEDs/sed/" + sed_file,
+                                    unpack=True,
+                                )
 
-                                lambda_model = sed[0] #micron
-                                flux_model = sed[1] #Lsun
-                                I_arr1=np.interp(lambda_array[::-1],lambda_model[::-1],flux_model[::-1])
-                                I_arr1=I_arr1/3.0e14*lambda_array[::-1]
-                                I_filt=np.sum(I_arr1*dfnu[::-1]*response_array[::-1])
-                                #TODO: Double check this for given filter
-                                I_filt=I_filt*3.0e14/np.median(lambda_array)
-                                flux_model_conv[imu-1][ims-1][isigma-1][imc-1] = I_filt
+                                lambda_model = sed[0]  # micron
+                                flux_model = sed[1]  # Lsun
+                                I_arr1 = np.interp(
+                                    lambda_array[::-1],
+                                    lambda_model[::-1],
+                                    flux_model[::-1],
+                                )
+                                I_arr1 = I_arr1 / 3.0e14 * lambda_array[::-1]
+                                I_filt = np.sum(
+                                    I_arr1 * dfnu[::-1] * response_array[::-1]
+                                )
+                                # TODO: Double check this for given filter
+                                I_filt = I_filt * 3.0e14 / np.median(lambda_array)
+                                flux_model_conv[imu - 1][ims - 1][isigma - 1][
+                                    imc - 1
+                                ] = I_filt
                             else:
                                 continue
 
-            pyfits.writeto(master_dir+'Model_SEDs/flux_filt/'+filter_name+'.fits',flux_model_conv)
+            pyfits.writeto(
+                master_dir + "Model_SEDs/flux_filt/" + filter_name + ".fits",
+                flux_model_conv,
+            )
 
-
-    def add_square_filter(self,filter_name,instrument,filter_lambda,filter_width):
-        '''
+    def add_square_filter(self, filter_name, instrument, filter_lambda, filter_width):
+        """
         Adds square filter to the database given the central filter_lambda and the filter_width.
         It adds a txt file to the database with columns lambda_array and response_array.
         It also adds the fits file with the convolved fluxes for the use of the idl method.
@@ -2687,111 +4055,167 @@ class SedFitter(object):
         Returns
         ----------
         None
-        '''
+        """
 
         master_dir = self.master_dir
 
-        existing_filters = os.listdir(master_dir+'/Model_SEDs/parfiles/')
+        existing_filters = os.listdir(master_dir + "/Model_SEDs/parfiles/")
 
-        dwave=filter_width/100.0
-        lambda_array=(np.arange(110)-55.0)*dwave+filter_lambda
+        dwave = filter_width / 100.0
+        lambda_array = (np.arange(110) - 55.0) * dwave + filter_lambda
         lambda_array = lambda_array[::-1]
-        response_array=np.zeros(110)
-        a=np.absolute(lambda_array-filter_lambda) < filter_width/2.0
-        response_array[a]=1.0
+        response_array = np.zeros(110)
+        a = np.absolute(lambda_array - filter_lambda) < filter_width / 2.0
+        response_array[a] = 1.0
 
-        if filter_name+'.txt' in existing_filters:
-            print('WARNING! The filter ' + filter_name + ' already exists in the database')
+        if filter_name + ".txt" in existing_filters:
+            print(
+                "WARNING! The filter " + filter_name + " already exists in the database"
+            )
         else:
-            header0='Filter name '+filter_name+'\n'
-            header1='Instrument '+instrument+'\n'
-            header2='Central wavelength '+str(np.around(np.median(lambda_array),decimals=1))+' micron'+'\nwavelength(micron) response(arbitrary_units)'
-            HEADER = header0+header1+header2
-            np.savetxt(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt',
-                       list(zip(lambda_array,response_array)),header=HEADER,fmt='%.5e',delimiter=' ',newline='\n')
-            with open(master_dir+'/Model_SEDs/parfiles/filter_default.dat','ab') as filter_default:
-                np.savetxt(filter_default,[np.array([filter_name,filter_lambda,instrument],dtype=str)],fmt='%s', delimiter=' ')
+            header0 = "Filter name " + filter_name + "\n"
+            header1 = "Instrument " + instrument + "\n"
+            header2 = (
+                "Central wavelength "
+                + str(np.around(np.median(lambda_array), decimals=1))
+                + " micron"
+                + "\nwavelength(micron) response(arbitrary_units)"
+            )
+            HEADER = header0 + header1 + header2
+            np.savetxt(
+                master_dir + "/Model_SEDs/parfiles/" + filter_name + ".txt",
+                list(zip(lambda_array, response_array)),
+                header=HEADER,
+                fmt="%.5e",
+                delimiter=" ",
+                newline="\n",
+            )
+            with open(
+                master_dir + "/Model_SEDs/parfiles/filter_default.dat", "ab"
+            ) as filter_default:
+                np.savetxt(
+                    filter_default,
+                    [np.array([filter_name, filter_lambda, instrument], dtype=str)],
+                    fmt="%s",
+                    delimiter=" ",
+                )
 
-                print(filter_name+'.txt succesfully saved in '+master_dir+'Model_SEDs/parfiles/')
+                print(
+                    filter_name
+                    + ".txt succesfully saved in "
+                    + master_dir
+                    + "Model_SEDs/parfiles/"
+                )
 
-        #For the IDL method we need the convolved fluxes for the new filter in a fits file
-        #(this is a translation from the IDL script filtflux.pro)
-        #Note that this is not needed for the new method as it convolves on the fly
+        # For the IDL method we need the convolved fluxes for the new filter in a fits file
+        # (this is a translation from the IDL script filtflux.pro)
+        # Note that this is not needed for the new method as it convolves on the fly
 
-        existing_FITS_filters = os.listdir(master_dir+'/Model_SEDs/flux_filt/')
-        
-        if filter_name+'.fits' in existing_FITS_filters:
-            print('WARNING! The filter file ' + filter_name + '.fits already exists in the database')
+        existing_FITS_filters = os.listdir(master_dir + "/Model_SEDs/flux_filt/")
+
+        if filter_name + ".fits" in existing_FITS_filters:
+            print(
+                "WARNING! The filter file "
+                + filter_name
+                + ".fits already exists in the database"
+            )
         else:
-            nu_array = 3.0e14/lambda_array #keep consistency in constants
+            nu_array = 3.0e14 / lambda_array  # keep consistency in constants
             nf = len(nu_array)
             if nu_array[0] > nu_array[1]:
                 nu_array = nu_array[::-1]
                 response_array = response_array[::-1]
-            dfnu= nu_array[1:nf-1]-nu_array[0:nf-2]
-            fint=np.sum(0.5*(response_array[0:nf-2]+response_array[1:nf-1])*dfnu)
-            response_array=response_array[1:nf-1]/fint
-            lambda_array=lambda_array[1:nf-1]
+            dfnu = nu_array[1 : nf - 1] - nu_array[0 : nf - 2]
+            fint = np.sum(
+                0.5 * (response_array[0 : nf - 2] + response_array[1 : nf - 1]) * dfnu
+            )
+            response_array = response_array[1 : nf - 1] / fint
+            lambda_array = lambda_array[1 : nf - 1]
 
-            nmc=15
-            nsigma=4
-            nms=14
-            nmu=20
+            nmc = 15
+            nsigma = 4
+            nms = 14
+            nmu = 20
 
-            flux_model_conv = np.zeros([nmu,nms,nsigma,nmc])
+            flux_model_conv = np.zeros([nmu, nms, nsigma, nmc])
 
-            sed_list = os.listdir(master_dir+'/Model_SEDs/sed/')
+            sed_list = os.listdir(master_dir + "/Model_SEDs/sed/")
 
-            for imc in range(1,nmc+1,1):
-                for isigma in range(1,nsigma+1,1):
-                    for ims in range(1,nms+1,1):
-                        for imu in range(1,nmu+1,1):
-                            sed_file = '{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}'.format(int(imc),int(isigma),
-                                                                                    int(ims),int(imu))+'.dat'
+            for imc in range(1, nmc + 1, 1):
+                for isigma in range(1, nsigma + 1, 1):
+                    for ims in range(1, nms + 1, 1):
+                        for imu in range(1, nmu + 1, 1):
+                            sed_file = (
+                                "{0:0=2d}_{1:0=2d}_{2:0=2d}_{3:0=2d}".format(
+                                    int(imc), int(isigma), int(ims), int(imu)
+                                )
+                                + ".dat"
+                            )
                             if sed_file in sed_list:
-                                sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+sed_file,unpack=True)
+                                sed = np.loadtxt(
+                                    master_dir + "/Model_SEDs/sed/" + sed_file,
+                                    unpack=True,
+                                )
 
-                                lambda_model = sed[0] #micron
-                                flux_model = sed[1] #Lsun
-                                I_arr1=np.interp(lambda_array[::-1],lambda_model[::-1],flux_model[::-1])
-                                I_arr1=I_arr1/3.0e14*lambda_array[::-1]
-                                I_filt=np.sum(I_arr1*dfnu[::-1]*response_array[::-1])
-                                I_filt=I_filt*3.0e14/filter_lambda
-                                flux_model_conv[imu-1][ims-1][isigma-1][imc-1] = I_filt
+                                lambda_model = sed[0]  # micron
+                                flux_model = sed[1]  # Lsun
+                                I_arr1 = np.interp(
+                                    lambda_array[::-1],
+                                    lambda_model[::-1],
+                                    flux_model[::-1],
+                                )
+                                I_arr1 = I_arr1 / 3.0e14 * lambda_array[::-1]
+                                I_filt = np.sum(
+                                    I_arr1 * dfnu[::-1] * response_array[::-1]
+                                )
+                                I_filt = I_filt * 3.0e14 / filter_lambda
+                                flux_model_conv[imu - 1][ims - 1][isigma - 1][
+                                    imc - 1
+                                ] = I_filt
                             else:
                                 continue
 
-            pyfits.writeto(master_dir+'Model_SEDs/flux_filt/'+filter_name+'.fits',flux_model_conv)
+            pyfits.writeto(
+                master_dir + "Model_SEDs/flux_filt/" + filter_name + ".fits",
+                flux_model_conv,
+            )
 
-
-    def remove_filter(self,filter_name=None):
-        '''
+    def remove_filter(self, filter_name=None):
+        """
         Removes a given filter from the database
 
         Parameters
         ----------
         filter_name: str
                 string with the name of the filter.
-        '''
+        """
 
         master_dir = self.master_dir
 
-        existing_filters = os.listdir(master_dir+'/Model_SEDs/parfiles/')
+        existing_filters = os.listdir(master_dir + "/Model_SEDs/parfiles/")
 
-        if filter_name+'.txt' in existing_filters:
-            filters_table = ascii.read(master_dir+'/Model_SEDs/parfiles/filter_default.dat')
-            filters_table.remove_row(np.argwhere(filters_table['filter']==filter_name)[0][0])
-            os.remove(master_dir+'/Model_SEDs/parfiles/'+filter_name+'.txt')
-            os.remove(master_dir+'/Model_SEDs/flux_filt/'+filter_name+'.fits')
-            ascii.write(filters_table,master_dir+'/Model_SEDs/parfiles/filter_default.dat', overwrite=True)
-            print('The filter', filter_name,'has been removed from the database')
+        if filter_name + ".txt" in existing_filters:
+            filters_table = ascii.read(
+                master_dir + "/Model_SEDs/parfiles/filter_default.dat"
+            )
+            filters_table.remove_row(
+                np.argwhere(filters_table["filter"] == filter_name)[0][0]
+            )
+            os.remove(master_dir + "/Model_SEDs/parfiles/" + filter_name + ".txt")
+            os.remove(master_dir + "/Model_SEDs/flux_filt/" + filter_name + ".fits")
+            ascii.write(
+                filters_table,
+                master_dir + "/Model_SEDs/parfiles/filter_default.dat",
+                overwrite=True,
+            )
+            print("The filter", filter_name, "has been removed from the database")
         else:
-            print('WARNING! The input filter is not in the database')
+            print("WARNING! The input filter is not in the database")
 
-
-
-    def plot_filter(self,filter_name,figsize=(6,4),legend=False,title=None,figname=None):
-        '''
+    def plot_filter(
+        self, filter_name, figsize=(6, 4), legend=False, title=None, figname=None
+    ):
+        """
         Plots a filter in the database. To see the available filter use SedFitter().print_default_filters
 
         Parameters
@@ -2811,36 +4235,57 @@ class SedFitter(object):
         Returns
         ----------
         A figure with the normalised response for the given filter_name
-        '''
+        """
 
         master_dir = self.master_dir
 
-        existing_filters = os.listdir(master_dir+'/Model_SEDs/parfiles/')
+        existing_filters = os.listdir(master_dir + "/Model_SEDs/parfiles/")
 
         plt.figure(figsize=figsize)
 
         for filt in filter_name:
-            if filt+'.txt' in existing_filters:
-                lambda_array,response_array = np.loadtxt(master_dir+'/Model_SEDs/parfiles/'+filt+'.txt',unpack=True)
-                plt.step(lambda_array,response_array/np.max(response_array),label=filt)
+            if filt + ".txt" in existing_filters:
+                lambda_array, response_array = np.loadtxt(
+                    master_dir + "/Model_SEDs/parfiles/" + filt + ".txt", unpack=True
+                )
+                plt.step(
+                    lambda_array, response_array / np.max(response_array), label=filt
+                )
             else:
-                print('WARNING! The filter ' + filt + ' is not in the database')
-                return()
+                print("WARNING! The filter " + filt + " is not in the database")
+                return ()
 
-        plt.xlabel('$\lambda\,(\mu\mathrm{m})$')
-        plt.ylabel('Filter Response (arbitrary units)')
+        plt.xlabel("$\lambda\,(\mu\mathrm{m})$")
+        plt.ylabel("Filter Response (arbitrary units)")
         if legend:
             plt.legend()
         if title is not None:
             plt.title(title)
         if figname is not None:
             plt.savefig(figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',figname)
+            print("Image saved in ", figname)
         plt.show()
 
-
-    def table2latex(self,table,keys=['chisq','mcore','sigma','rcore','mstar','theta_view','av','massenv','theta_w_esc','mdotd','lbol_iso','lbol'],tablename=None):
-        '''
+    def table2latex(
+        self,
+        table,
+        keys=[
+            "chisq",
+            "mcore",
+            "sigma",
+            "rcore",
+            "mstar",
+            "theta_view",
+            "av",
+            "massenv",
+            "theta_w_esc",
+            "mdotd",
+            "lbol_iso",
+            "lbol",
+        ],
+        tablename=None,
+    ):
+        """
         Outputs the astropy table into a latex table given the keys properly
         formatted and with the correct units
 
@@ -2861,45 +4306,128 @@ class SedFitter(object):
         Returns
         ----------
         Latex formatted table in the path with the name tablename
-        '''
+        """
 
         master_dir = self.master_dir
 
-        col_names = np.array(['SED_number', 'chisq', 'chisq_nonlim', 'mcore', 'sigma', 'mstar', 'theta_view', 'dist', 'av', 'rcore', 'massenv', 'theta_w_esc',
-                       'rstar', 'lstar', 'tstar', 'mdisk', 'rdisk', 'mdotd', 'lbol', 'lbol_iso', 'lbol_av', 't_now'])
+        col_names = np.array(
+            [
+                "SED_number",
+                "chisq",
+                "chisq_nonlim",
+                "mcore",
+                "sigma",
+                "mstar",
+                "theta_view",
+                "dist",
+                "av",
+                "rcore",
+                "massenv",
+                "theta_w_esc",
+                "rstar",
+                "lstar",
+                "tstar",
+                "mdisk",
+                "rdisk",
+                "mdotd",
+                "lbol",
+                "lbol_iso",
+                "lbol_av",
+                "t_now",
+            ]
+        )
 
-        col_latex_names = np.array(['SED_number','$\chi^2$','$\chi^2_\mathrm{nonlimit}$','$M_\mathrm{c}$','$\Sigma_\mathrm{cl}$','$m_*$','$\\theta_\mathrm{view}$','$d$','$A_V$',
-                     '$R_\mathrm{core}$','$M_\mathrm{env}$','$\\theta_\mathrm{w,esc}$','$R_*$', '$L_*$', '$T_*$', '$m_\mathrm{disk}$', '$r_\mathrm{disk}$',
-                     '$\dot{M}_\mathrm{disk}$','$L_\mathrm{bol}$','$L_\mathrm{bol,iso}$','$L_\mathrm{bol,av}$','$t_\mathrm{now}$'])
+        col_latex_names = np.array(
+            [
+                "SED_number",
+                "$\chi^2$",
+                "$\chi^2_\mathrm{nonlimit}$",
+                "$M_\mathrm{c}$",
+                "$\Sigma_\mathrm{cl}$",
+                "$m_*$",
+                "$\\theta_\mathrm{view}$",
+                "$d$",
+                "$A_V$",
+                "$R_\mathrm{core}$",
+                "$M_\mathrm{env}$",
+                "$\\theta_\mathrm{w,esc}$",
+                "$R_*$",
+                "$L_*$",
+                "$T_*$",
+                "$m_\mathrm{disk}$",
+                "$r_\mathrm{disk}$",
+                "$\dot{M}_\mathrm{disk}$",
+                "$L_\mathrm{bol}$",
+                "$L_\mathrm{bol,iso}$",
+                "$L_\mathrm{bol,av}$",
+                "$t_\mathrm{now}$",
+            ]
+        )
 
-        latex_names_table = Table(data=col_latex_names,names=col_names)
+        latex_names_table = Table(data=col_latex_names, names=col_names)
 
-        formats_table = np.array(['','%.2f','%.2f','%.0f','%.3f','%.0f','%.0f','%.0f','%.2f','%.2f',
-                                  '%.2f','%.0f','%.2f','%.2f','%.2f','%.2f','%.2f','%.1e','%.1e','%.1e',
-                                  '%.1e','%.1e'])
+        formats_table = np.array(
+            [
+                "",
+                "%.2f",
+                "%.2f",
+                "%.0f",
+                "%.3f",
+                "%.0f",
+                "%.0f",
+                "%.0f",
+                "%.2f",
+                "%.2f",
+                "%.2f",
+                "%.0f",
+                "%.2f",
+                "%.2f",
+                "%.2f",
+                "%.2f",
+                "%.2f",
+                "%.1e",
+                "%.1e",
+                "%.1e",
+                "%.1e",
+                "%.1e",
+            ]
+        )
 
-        latex_formats_table = Table(data=formats_table,names=col_names)
-
+        latex_formats_table = Table(data=formats_table, names=col_names)
 
         formats_dict = {}
-        for name_value, format_value in zip(latex_names_table[keys].as_array()[0],
-                                            latex_formats_table[keys].as_array()[0]):
+        for name_value, format_value in zip(
+            latex_names_table[keys].as_array()[0],
+            latex_formats_table[keys].as_array()[0],
+        ):
             formats_dict[name_value] = format_value
 
         if tablename is not None:
-            ascii.write(table[keys],
-                        format='latex',
-                        formats=formats_dict,
-                        names=list(latex_names_table[keys].as_array()[0]),
-                        output=tablename)
+            ascii.write(
+                table[keys],
+                format="latex",
+                formats=formats_dict,
+                names=list(latex_names_table[keys].as_array()[0]),
+                output=tablename,
+            )
         else:
-            print('Please, set tablename to a str to save the table, including the name of the table and extension, e.g., table.txt')
+            print(
+                "Please, set tablename to a str to save the table, including the name of the table and extension, e.g., table.txt"
+            )
 
         return
 
-
-    def get_average_model(self,models,number_of_models=5,chisq_cut=None,core_radius_cut=None,method=None,tablename=None):
-        '''
+    def get_average_model(
+        self,
+        models,
+        sorted_by="chisq_nonlim",
+        number_of_models=5,
+        chisq_cut=None,
+        core_radius_cut=None,
+        method=None,
+        tablename=None,
+    ):
+        """
         Get the average model by means of calculating the geometric mean
         for all parameters except for av, theta_view, and theta_w_esc from which arithmetic mean is calculated
 
@@ -2914,6 +4442,11 @@ class SedFitter(object):
         ----------
         models: table, `astropy.table`
             models to be averaged over. It should be an astropy table got from the get_model_info() function.
+
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) ir chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         number_of_models: int
             Number of models to be used for the average for method 1.
@@ -2939,268 +4472,499 @@ class SedFitter(object):
         Returns
         ----------
         table: `astropy.table` with all the model information based on the given keys
-        '''
+        """
+
+        if sorted_by not in ("chisq", "chisq_nonlim"):
+            raise ValueError("'sorted_by' must be either 'chisq', or 'chisq_nonlim'")
 
         master_dir = self.master_dir
 
-        average_model_table = models[0:int(number_of_models)]
+        average_model_table = models[0 : int(number_of_models)]
 
-        columns_names = ['method','number_of_models_used',
-                         'mcore','Dmcore','sigma','Dsigma','mstar','Dmstar','theta_view','Dtheta_view',
-                         'dist','av','Dav','rcore','Drcore','massenv','Dmassenv','theta_w_esc','Dtheta_w_esc',
-                         'rstar','Drstar','lstar','Dlstar','tstar','Dtstar','mdisk','Dmdisk','rdisk','Drdisk',
-                         'mdotd','Dmdotd','lbol','Dlbol','lbol_iso','Dlbol_iso','lbol_av','Dlbol_av','t_now','Dt_now']
+        columns_names = [
+            "method",
+            "number_of_models_used",
+            "mcore",
+            "Dmcore",
+            "sigma",
+            "Dsigma",
+            "mstar",
+            "Dmstar",
+            "theta_view",
+            "Dtheta_view",
+            "dist",
+            "av",
+            "Dav",
+            "rcore",
+            "Drcore",
+            "massenv",
+            "Dmassenv",
+            "theta_w_esc",
+            "Dtheta_w_esc",
+            "rstar",
+            "Drstar",
+            "lstar",
+            "Dlstar",
+            "tstar",
+            "Dtstar",
+            "mdisk",
+            "Dmdisk",
+            "rdisk",
+            "Drdisk",
+            "mdotd",
+            "Dmdotd",
+            "lbol",
+            "Dlbol",
+            "lbol_iso",
+            "Dlbol_iso",
+            "lbol_av",
+            "Dlbol_av",
+            "t_now",
+            "Dt_now",
+        ]
 
-        units = [u.dimensionless_unscaled,u.dimensionless_unscaled,
-                 u.M_sun,u.dimensionless_unscaled,u.g*u.cm**-2,u.dimensionless_unscaled,u.M_sun,u.dimensionless_unscaled,u.deg,u.deg,
-                 u.pc,u.mag,u.mag,u.pc,u.dimensionless_unscaled,u.M_sun,u.dimensionless_unscaled,u.deg,u.deg,
-                 u.R_sun,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.K,u.dimensionless_unscaled,u.M_sun,u.dimensionless_unscaled,u.au,u.dimensionless_unscaled,
-                 u.M_sun/u.yr,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.L_sun,u.dimensionless_unscaled,u.yr,u.dimensionless_unscaled]
+        units = [
+            u.dimensionless_unscaled,
+            u.dimensionless_unscaled,
+            u.M_sun,
+            u.dimensionless_unscaled,
+            u.g * u.cm**-2,
+            u.dimensionless_unscaled,
+            u.M_sun,
+            u.dimensionless_unscaled,
+            u.deg,
+            u.deg,
+            u.pc,
+            u.mag,
+            u.mag,
+            u.pc,
+            u.dimensionless_unscaled,
+            u.M_sun,
+            u.dimensionless_unscaled,
+            u.deg,
+            u.deg,
+            u.R_sun,
+            u.dimensionless_unscaled,
+            u.L_sun,
+            u.dimensionless_unscaled,
+            u.K,
+            u.dimensionless_unscaled,
+            u.M_sun,
+            u.dimensionless_unscaled,
+            u.au,
+            u.dimensionless_unscaled,
+            u.M_sun / u.yr,
+            u.dimensionless_unscaled,
+            u.L_sun,
+            u.dimensionless_unscaled,
+            u.L_sun,
+            u.dimensionless_unscaled,
+            u.L_sun,
+            u.dimensionless_unscaled,
+            u.yr,
+            u.dimensionless_unscaled,
+        ]
 
-        data=np.array(['average model method 1',number_of_models,
-                       gmean(average_model_table['mcore']),gstd(average_model_table['mcore']),
-                       gmean(average_model_table['sigma']),gstd(average_model_table['sigma']),
-                       gmean(average_model_table['mstar']),gstd(average_model_table['mstar']),
-                       np.mean(average_model_table['theta_view']),np.std(average_model_table['theta_view']),
-                       np.mean(average_model_table['dist']),
-                       np.mean(average_model_table['av']),np.std(average_model_table['av']),
-                       gmean(average_model_table['rcore']),gstd(average_model_table['rcore']),
-                       gmean(average_model_table['massenv']),gstd(average_model_table['massenv']),
-                       np.mean(average_model_table['theta_w_esc']),np.std(average_model_table['theta_w_esc']),
-                       gmean(average_model_table['rstar']),gstd(average_model_table['rstar']),
-                       gmean(average_model_table['lstar']),gstd(average_model_table['lstar']),
-                       gmean(average_model_table['tstar']),gstd(average_model_table['tstar']),
-                       gmean(average_model_table['mdisk']),gstd(average_model_table['mdisk']),
-                       gmean(average_model_table['rdisk']),gstd(average_model_table['rdisk']),
-                       gmean(average_model_table['mdotd']),gstd(average_model_table['mdotd']),
-                       gmean(average_model_table['lbol']),gstd(average_model_table['lbol']),
-                       gmean(average_model_table['lbol_iso']),gstd(average_model_table['lbol_iso']),
-                       gmean(average_model_table['lbol_av']),gstd(average_model_table['lbol_av']),
-                       gmean(average_model_table['t_now']),gstd(average_model_table['t_now'])],dtype=object)
+        data = np.array(
+            [
+                "average model method 1",
+                number_of_models,
+                gmean(average_model_table["mcore"]),
+                gstd(average_model_table["mcore"]),
+                gmean(average_model_table["sigma"]),
+                gstd(average_model_table["sigma"]),
+                gmean(average_model_table["mstar"]),
+                gstd(average_model_table["mstar"]),
+                np.mean(average_model_table["theta_view"]),
+                np.std(average_model_table["theta_view"]),
+                np.mean(average_model_table["dist"]),
+                np.mean(average_model_table["av"]),
+                np.std(average_model_table["av"]),
+                gmean(average_model_table["rcore"]),
+                gstd(average_model_table["rcore"]),
+                gmean(average_model_table["massenv"]),
+                gstd(average_model_table["massenv"]),
+                np.mean(average_model_table["theta_w_esc"]),
+                np.std(average_model_table["theta_w_esc"]),
+                gmean(average_model_table["rstar"]),
+                gstd(average_model_table["rstar"]),
+                gmean(average_model_table["lstar"]),
+                gstd(average_model_table["lstar"]),
+                gmean(average_model_table["tstar"]),
+                gstd(average_model_table["tstar"]),
+                gmean(average_model_table["mdisk"]),
+                gstd(average_model_table["mdisk"]),
+                gmean(average_model_table["rdisk"]),
+                gstd(average_model_table["rdisk"]),
+                gmean(average_model_table["mdotd"]),
+                gstd(average_model_table["mdotd"]),
+                gmean(average_model_table["lbol"]),
+                gstd(average_model_table["lbol"]),
+                gmean(average_model_table["lbol_iso"]),
+                gstd(average_model_table["lbol_iso"]),
+                gmean(average_model_table["lbol_av"]),
+                gstd(average_model_table["lbol_av"]),
+                gmean(average_model_table["t_now"]),
+                gstd(average_model_table["t_now"]),
+            ],
+            dtype=object,
+        )
 
-        dtype = [str,int,float,float,float,float,float,float,float,float,float,float,float,
-                 float,float,float,float,float,float,float,float,float,float,float,float,float,
-                 float,float,float,float,float,float,float,float,float,float,float,float,float]
+        dtype = [
+            str,
+            int,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+            float,
+        ]
 
-        final_average_table = Table(data = data, names = columns_names, units=units, dtype=dtype)
+        final_average_table = Table(data=data, names=columns_names, dtype=dtype)
+        # final_average_table = Table(data = data, names = columns_names, units=units, dtype=dtype)
 
+        models.sort(sorted_by)
 
         if chisq_cut is not None and core_radius_cut is None:
-            average_model_table_chisq = models[models['chisq']<=chisq_cut]
+            average_model_table_chisq = models[models[sorted_by] <= chisq_cut]
 
             number_of_models = len(average_model_table_chisq)
-            if number_of_models==0:
-                raise ValueError('The considered constraints in chisq_cut produce an empty table. Please consider to relax them.')
-            if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
+            if number_of_models == 0:
+                raise ValueError(
+                    "The considered constraints in chisq_cut produce an empty table. Please consider to relax them."
+                )
+            if number_of_models == 1:
+                raise ValueError(
+                    "The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them."
+                )
 
             if method is not None:
-                if method == 'liu':
-                    if len(average_model_table_chisq)>=5:
+                if method == "liu":
+                    if len(average_model_table_chisq) >= 5:
                         average_model_table_chisq = average_model_table_chisq[0:5]
                     else:
                         average_model_table_chisq = average_model_table_chisq
-                elif method == 'moser':
-                    if len(average_model_table_chisq)>=10:
+                elif method == "moser":
+                    if len(average_model_table_chisq) >= 10:
                         average_model_table_chisq = average_model_table_chisq[0:10]
                     else:
                         average_model_table_chisq = average_model_table_chisq
                 else:
-                    raise ValueError('Method must be either liu, moser or None')
+                    raise ValueError("Method must be either liu, moser or None")
 
             number_of_models = len(average_model_table_chisq)
 
-            data=np.array(['average model method 2',number_of_models,
-                           gmean(average_model_table_chisq['mcore']),gstd(average_model_table_chisq['mcore']),
-                           gmean(average_model_table_chisq['sigma']),gstd(average_model_table_chisq['sigma']),
-                           gmean(average_model_table_chisq['mstar']),gstd(average_model_table_chisq['mstar']),
-                           np.mean(average_model_table_chisq['theta_view']),np.std(average_model_table_chisq['theta_view']),
-                           np.mean(average_model_table_chisq['dist']),
-                           np.mean(average_model_table_chisq['av']),np.std(average_model_table_chisq['av']),
-                           gmean(average_model_table_chisq['rcore']),gstd(average_model_table_chisq['rcore']),
-                           gmean(average_model_table_chisq['massenv']),gstd(average_model_table_chisq['massenv']),
-                           np.mean(average_model_table_chisq['theta_w_esc']),np.std(average_model_table_chisq['theta_w_esc']),
-                           gmean(average_model_table_chisq['rstar']),gstd(average_model_table_chisq['rstar']),
-                           gmean(average_model_table_chisq['lstar']),gstd(average_model_table_chisq['lstar']),
-                           gmean(average_model_table_chisq['tstar']),gstd(average_model_table_chisq['tstar']),
-                           gmean(average_model_table_chisq['mdisk']),gstd(average_model_table_chisq['mdisk']),
-                           gmean(average_model_table_chisq['rdisk']),gstd(average_model_table_chisq['rdisk']),
-                           gmean(average_model_table_chisq['mdotd']),gstd(average_model_table_chisq['mdotd']),
-                           gmean(average_model_table_chisq['lbol']),gstd(average_model_table_chisq['lbol']),
-                           gmean(average_model_table_chisq['lbol_iso']),gstd(average_model_table_chisq['lbol_iso']),
-                           gmean(average_model_table_chisq['lbol_av']),gstd(average_model_table_chisq['lbol_av']),
-                           gmean(average_model_table_chisq['t_now']),gstd(average_model_table_chisq['t_now'])],dtype=object)
+            data = np.array(
+                [
+                    "average model method 2",
+                    number_of_models,
+                    gmean(average_model_table_chisq["mcore"]),
+                    gstd(average_model_table_chisq["mcore"]),
+                    gmean(average_model_table_chisq["sigma"]),
+                    gstd(average_model_table_chisq["sigma"]),
+                    gmean(average_model_table_chisq["mstar"]),
+                    gstd(average_model_table_chisq["mstar"]),
+                    np.mean(average_model_table_chisq["theta_view"]),
+                    np.std(average_model_table_chisq["theta_view"]),
+                    np.mean(average_model_table_chisq["dist"]),
+                    np.mean(average_model_table_chisq["av"]),
+                    np.std(average_model_table_chisq["av"]),
+                    gmean(average_model_table_chisq["rcore"]),
+                    gstd(average_model_table_chisq["rcore"]),
+                    gmean(average_model_table_chisq["massenv"]),
+                    gstd(average_model_table_chisq["massenv"]),
+                    np.mean(average_model_table_chisq["theta_w_esc"]),
+                    np.std(average_model_table_chisq["theta_w_esc"]),
+                    gmean(average_model_table_chisq["rstar"]),
+                    gstd(average_model_table_chisq["rstar"]),
+                    gmean(average_model_table_chisq["lstar"]),
+                    gstd(average_model_table_chisq["lstar"]),
+                    gmean(average_model_table_chisq["tstar"]),
+                    gstd(average_model_table_chisq["tstar"]),
+                    gmean(average_model_table_chisq["mdisk"]),
+                    gstd(average_model_table_chisq["mdisk"]),
+                    gmean(average_model_table_chisq["rdisk"]),
+                    gstd(average_model_table_chisq["rdisk"]),
+                    gmean(average_model_table_chisq["mdotd"]),
+                    gstd(average_model_table_chisq["mdotd"]),
+                    gmean(average_model_table_chisq["lbol"]),
+                    gstd(average_model_table_chisq["lbol"]),
+                    gmean(average_model_table_chisq["lbol_iso"]),
+                    gstd(average_model_table_chisq["lbol_iso"]),
+                    gmean(average_model_table_chisq["lbol_av"]),
+                    gstd(average_model_table_chisq["lbol_av"]),
+                    gmean(average_model_table_chisq["t_now"]),
+                    gstd(average_model_table_chisq["t_now"]),
+                ],
+                dtype=object,
+            )
 
             final_average_table.add_row(vals=data)
 
-
         elif chisq_cut is None and core_radius_cut is not None:
-            distance = models['dist'][0] #pc
-            core_radius_cut_au = core_radius_cut * distance #arcsec x pc = au
-            core_radius_cut_pc = core_radius_cut_au*u.au.to(u.pc) #from au to pc
+            distance = models["dist"][0]  # pc
+            core_radius_cut_au = core_radius_cut * distance  # arcsec x pc = au
+            core_radius_cut_pc = core_radius_cut_au * u.au.to(u.pc)  # from au to pc
 
-            average_model_table_rcore = models[models['rcore']<=core_radius_cut_pc]
+            average_model_table_rcore = models[models["rcore"] <= core_radius_cut_pc]
 
             number_of_models = len(average_model_table_rcore)
-            if number_of_models==0:
-                raise ValueError('The considered constraints in core_radius_cut produce an empty table. Please consider to relax them.')
-            if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
+            if number_of_models == 0:
+                raise ValueError(
+                    "The considered constraints in core_radius_cut produce an empty table. Please consider to relax them."
+                )
+            if number_of_models == 1:
+                raise ValueError(
+                    "The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them."
+                )
 
             if method is not None:
-                if method == 'liu':
-                    if len(average_model_table_rcore)>=5:
+                if method == "liu":
+                    if len(average_model_table_rcore) >= 5:
                         average_model_table_rcore = average_model_table_rcore[0:5]
                     else:
                         average_model_table_rcore = average_model_table_rcore
-                elif method == 'moser':
-                    if len(average_model_table_rcore)>=10:
+                elif method == "moser":
+                    if len(average_model_table_rcore) >= 10:
                         average_model_table_rcore = average_model_table_rcore[0:10]
                     else:
                         average_model_table_rcore = average_model_table_rcore
                 else:
-                    raise ValueError('Method must be either liu, moser or None')
+                    raise ValueError("Method must be either liu, moser or None")
 
             number_of_models = len(average_model_table_rcore)
 
-            data=np.array(['average model method 2',number_of_models,
-                           gmean(average_model_table_rcore['mcore']),gstd(average_model_table_rcore['mcore']),
-                           gmean(average_model_table_rcore['sigma']),gstd(average_model_table_rcore['sigma']),
-                           gmean(average_model_table_rcore['mstar']),gstd(average_model_table_rcore['mstar']),
-                           np.mean(average_model_table_rcore['theta_view']),np.std(average_model_table_rcore['theta_view']),
-                           np.mean(average_model_table_rcore['dist']),
-                           np.mean(average_model_table_rcore['av']),np.std(average_model_table_rcore['av']),
-                           gmean(average_model_table_rcore['rcore']),gstd(average_model_table_rcore['rcore']),
-                           gmean(average_model_table_rcore['massenv']),gstd(average_model_table_rcore['massenv']),
-                           np.mean(average_model_table_rcore['theta_w_esc']),np.std(average_model_table_rcore['theta_w_esc']),
-                           gmean(average_model_table_rcore['rstar']),gstd(average_model_table_rcore['rstar']),
-                           gmean(average_model_table_rcore['lstar']),gstd(average_model_table_rcore['lstar']),
-                           gmean(average_model_table_rcore['tstar']),gstd(average_model_table_rcore['tstar']),
-                           gmean(average_model_table_rcore['mdisk']),gstd(average_model_table_rcore['mdisk']),
-                           gmean(average_model_table_rcore['rdisk']),gstd(average_model_table_rcore['rdisk']),
-                           gmean(average_model_table_rcore['mdotd']),gstd(average_model_table_rcore['mdotd']),
-                           gmean(average_model_table_rcore['lbol']),gstd(average_model_table_rcore['lbol']),
-                           gmean(average_model_table_rcore['lbol_iso']),gstd(average_model_table_rcore['lbol_iso']),
-                           gmean(average_model_table_rcore['lbol_av']),gstd(average_model_table_rcore['lbol_av']),
-                           gmean(average_model_table_rcore['t_now']),gstd(average_model_table_rcore['t_now'])],dtype=object)
+            data = np.array(
+                [
+                    "average model method 2",
+                    number_of_models,
+                    gmean(average_model_table_rcore["mcore"]),
+                    gstd(average_model_table_rcore["mcore"]),
+                    gmean(average_model_table_rcore["sigma"]),
+                    gstd(average_model_table_rcore["sigma"]),
+                    gmean(average_model_table_rcore["mstar"]),
+                    gstd(average_model_table_rcore["mstar"]),
+                    np.mean(average_model_table_rcore["theta_view"]),
+                    np.std(average_model_table_rcore["theta_view"]),
+                    np.mean(average_model_table_rcore["dist"]),
+                    np.mean(average_model_table_rcore["av"]),
+                    np.std(average_model_table_rcore["av"]),
+                    gmean(average_model_table_rcore["rcore"]),
+                    gstd(average_model_table_rcore["rcore"]),
+                    gmean(average_model_table_rcore["massenv"]),
+                    gstd(average_model_table_rcore["massenv"]),
+                    np.mean(average_model_table_rcore["theta_w_esc"]),
+                    np.std(average_model_table_rcore["theta_w_esc"]),
+                    gmean(average_model_table_rcore["rstar"]),
+                    gstd(average_model_table_rcore["rstar"]),
+                    gmean(average_model_table_rcore["lstar"]),
+                    gstd(average_model_table_rcore["lstar"]),
+                    gmean(average_model_table_rcore["tstar"]),
+                    gstd(average_model_table_rcore["tstar"]),
+                    gmean(average_model_table_rcore["mdisk"]),
+                    gstd(average_model_table_rcore["mdisk"]),
+                    gmean(average_model_table_rcore["rdisk"]),
+                    gstd(average_model_table_rcore["rdisk"]),
+                    gmean(average_model_table_rcore["mdotd"]),
+                    gstd(average_model_table_rcore["mdotd"]),
+                    gmean(average_model_table_rcore["lbol"]),
+                    gstd(average_model_table_rcore["lbol"]),
+                    gmean(average_model_table_rcore["lbol_iso"]),
+                    gstd(average_model_table_rcore["lbol_iso"]),
+                    gmean(average_model_table_rcore["lbol_av"]),
+                    gstd(average_model_table_rcore["lbol_av"]),
+                    gmean(average_model_table_rcore["t_now"]),
+                    gstd(average_model_table_rcore["t_now"]),
+                ],
+                dtype=object,
+            )
 
             final_average_table.add_row(vals=data)
-
 
         elif chisq_cut is not None and core_radius_cut is not None:
-            distance = models['dist'][0] #pc
-            core_radius_cut_au = core_radius_cut * distance #arcsec x pc = au
-            core_radius_cut_pc = core_radius_cut_au*u.au.to(u.pc) #from au to pc
+            distance = models["dist"][0]  # pc
+            core_radius_cut_au = core_radius_cut * distance  # arcsec x pc = au
+            core_radius_cut_pc = core_radius_cut_au * u.au.to(u.pc)  # from au to pc
 
-            average_model_table_chisq_rcore = models[(models['chisq']<=chisq_cut) & (models['rcore']<=core_radius_cut_pc)]
+            average_model_table_chisq_rcore = models[
+                (models[sorted_by] <= chisq_cut)
+                & (models["rcore"] <= core_radius_cut_pc)
+            ]
 
             number_of_models = len(average_model_table_chisq_rcore)
-            if number_of_models==0:
-                raise ValueError('The considered constraints either in chisq_cut or core_radius_cut produce an empty table. Please consider to relax them.')
-            if number_of_models==1:
-                raise ValueError('The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them.')
+            if number_of_models == 0:
+                raise ValueError(
+                    "The considered constraints either in chisq_cut or core_radius_cut produce an empty table. Please consider to relax them."
+                )
+            if number_of_models == 1:
+                raise ValueError(
+                    "The considered constraints in chisq_cut produce a table with 1 row, no mean or dispersion makes sense. Please consider to relax them."
+                )
 
             if method is not None:
-                if method == 'liu':
-                    if len(average_model_table_chisq_rcore)>=5:
-                        average_model_table_chisq_rcore = average_model_table_chisq_rcore[0:5]
+                if method == "liu":
+                    if len(average_model_table_chisq_rcore) >= 5:
+                        average_model_table_chisq_rcore = (
+                            average_model_table_chisq_rcore[0:5]
+                        )
                     else:
-                        average_model_table_chisq_rcore = average_model_table_chisq_rcore
-                elif method == 'moser':
-                    if len(average_model_table_chisq_rcore)>=10:
-                        average_model_table_chisq_rcore = average_model_table_chisq_rcore[0:10]
+                        average_model_table_chisq_rcore = (
+                            average_model_table_chisq_rcore
+                        )
+                elif method == "moser":
+                    if len(average_model_table_chisq_rcore) >= 10:
+                        average_model_table_chisq_rcore = (
+                            average_model_table_chisq_rcore[0:10]
+                        )
                     else:
-                        average_model_table_chisq_rcore = average_model_table_chisq_rcore
+                        average_model_table_chisq_rcore = (
+                            average_model_table_chisq_rcore
+                        )
                 else:
-                    raise ValueError('Method must be either liu, moser or None')
+                    raise ValueError("Method must be either liu, moser or None")
 
             number_of_models = len(average_model_table_chisq_rcore)
 
-            data=np.array(['average model method 2',number_of_models,
-                           gmean(average_model_table_chisq_rcore['mcore']),gstd(average_model_table_chisq_rcore['mcore']),
-                           gmean(average_model_table_chisq_rcore['sigma']),gstd(average_model_table_chisq_rcore['sigma']),
-                           gmean(average_model_table_chisq_rcore['mstar']),gstd(average_model_table_chisq_rcore['mstar']),
-                           np.mean(average_model_table_chisq_rcore['theta_view']),np.std(average_model_table_chisq_rcore['theta_view']),
-                           np.mean(average_model_table_chisq_rcore['dist']),
-                           np.mean(average_model_table_chisq_rcore['av']),np.std(average_model_table_chisq_rcore['av']),
-                           gmean(average_model_table_chisq_rcore['rcore']),gstd(average_model_table_chisq_rcore['rcore']),
-                           gmean(average_model_table_chisq_rcore['massenv']),gstd(average_model_table_chisq_rcore['massenv']),
-                           np.mean(average_model_table_chisq_rcore['theta_w_esc']),np.std(average_model_table_chisq_rcore['theta_w_esc']),
-                           gmean(average_model_table_chisq_rcore['rstar']),gstd(average_model_table_chisq_rcore['rstar']),
-                           gmean(average_model_table_chisq_rcore['lstar']),gstd(average_model_table_chisq_rcore['lstar']),
-                           gmean(average_model_table_chisq_rcore['tstar']),gstd(average_model_table_chisq_rcore['tstar']),
-                           gmean(average_model_table_chisq_rcore['mdisk']),gstd(average_model_table_chisq_rcore['mdisk']),
-                           gmean(average_model_table_chisq_rcore['rdisk']),gstd(average_model_table_chisq_rcore['rdisk']),
-                           gmean(average_model_table_chisq_rcore['mdotd']),gstd(average_model_table_chisq_rcore['mdotd']),
-                           gmean(average_model_table_chisq_rcore['lbol']),gstd(average_model_table_chisq_rcore['lbol']),
-                           gmean(average_model_table_chisq_rcore['lbol_iso']),gstd(average_model_table_chisq_rcore['lbol_iso']),
-                           gmean(average_model_table_chisq_rcore['lbol_av']),gstd(average_model_table_chisq_rcore['lbol_av']),
-                           gmean(average_model_table_chisq_rcore['t_now']),gstd(average_model_table_chisq_rcore['t_now'])],dtype=object)
+            data = np.array(
+                [
+                    "average model method 2",
+                    number_of_models,
+                    gmean(average_model_table_chisq_rcore["mcore"]),
+                    gstd(average_model_table_chisq_rcore["mcore"]),
+                    gmean(average_model_table_chisq_rcore["sigma"]),
+                    gstd(average_model_table_chisq_rcore["sigma"]),
+                    gmean(average_model_table_chisq_rcore["mstar"]),
+                    gstd(average_model_table_chisq_rcore["mstar"]),
+                    np.mean(average_model_table_chisq_rcore["theta_view"]),
+                    np.std(average_model_table_chisq_rcore["theta_view"]),
+                    np.mean(average_model_table_chisq_rcore["dist"]),
+                    np.mean(average_model_table_chisq_rcore["av"]),
+                    np.std(average_model_table_chisq_rcore["av"]),
+                    gmean(average_model_table_chisq_rcore["rcore"]),
+                    gstd(average_model_table_chisq_rcore["rcore"]),
+                    gmean(average_model_table_chisq_rcore["massenv"]),
+                    gstd(average_model_table_chisq_rcore["massenv"]),
+                    np.mean(average_model_table_chisq_rcore["theta_w_esc"]),
+                    np.std(average_model_table_chisq_rcore["theta_w_esc"]),
+                    gmean(average_model_table_chisq_rcore["rstar"]),
+                    gstd(average_model_table_chisq_rcore["rstar"]),
+                    gmean(average_model_table_chisq_rcore["lstar"]),
+                    gstd(average_model_table_chisq_rcore["lstar"]),
+                    gmean(average_model_table_chisq_rcore["tstar"]),
+                    gstd(average_model_table_chisq_rcore["tstar"]),
+                    gmean(average_model_table_chisq_rcore["mdisk"]),
+                    gstd(average_model_table_chisq_rcore["mdisk"]),
+                    gmean(average_model_table_chisq_rcore["rdisk"]),
+                    gstd(average_model_table_chisq_rcore["rdisk"]),
+                    gmean(average_model_table_chisq_rcore["mdotd"]),
+                    gstd(average_model_table_chisq_rcore["mdotd"]),
+                    gmean(average_model_table_chisq_rcore["lbol"]),
+                    gstd(average_model_table_chisq_rcore["lbol"]),
+                    gmean(average_model_table_chisq_rcore["lbol_iso"]),
+                    gstd(average_model_table_chisq_rcore["lbol_iso"]),
+                    gmean(average_model_table_chisq_rcore["lbol_av"]),
+                    gstd(average_model_table_chisq_rcore["lbol_av"]),
+                    gmean(average_model_table_chisq_rcore["t_now"]),
+                    gstd(average_model_table_chisq_rcore["t_now"]),
+                ],
+                dtype=object,
+            )
 
             final_average_table.add_row(vals=data)
 
-        #For format consistency
-        final_average_table['mcore'].info.format = '%.5f'
-        final_average_table['Dmcore'].info.format = '%.5f'
-        final_average_table['sigma'].info.format = '%.5f'
-        final_average_table['Dsigma'].info.format = '%.5f'
-        final_average_table['mstar'].info.format = '%.5f'
-        final_average_table['Dmstar'].info.format = '%.5f'
-        final_average_table['theta_view'].info.format = '%.5f'
-        final_average_table['Dtheta_view'].info.format = '%.5f'
-        final_average_table['av'].info.format = '%.5f'
-        final_average_table['Dav'].info.format = '%.5f'
-        final_average_table['rcore'].info.format = '%.5f'
-        final_average_table['Drcore'].info.format = '%.5f'
-        final_average_table['massenv'].info.format = '%.5f'
-        final_average_table['Dmassenv'].info.format = '%.5f'
-        final_average_table['theta_w_esc'].info.format = '%.5f'
-        final_average_table['Dtheta_w_esc'].info.format = '%.5f'
-        final_average_table['theta_w_esc'].info.format = '%.5f'
-        final_average_table['Dtheta_w_esc'].info.format = '%.5f'
-        final_average_table['rstar'].info.format = '%.5f'
-        final_average_table['Drstar'].info.format = '%.5f'
-        final_average_table['lstar'].info.format = '%.5e'
-        final_average_table['Dlstar'].info.format = '%.5f'
-        final_average_table['tstar'].info.format = '%.5e'
-        final_average_table['Dtstar'].info.format = '%.5f'
-        final_average_table['mdisk'].info.format = '%.5f'
-        final_average_table['Dmdisk'].info.format = '%.5f'
-        final_average_table['rdisk'].info.format = '%.5e'
-        final_average_table['Drdisk'].info.format = '%.5f'
-        final_average_table['mdotd'].info.format = '%.5e'
-        final_average_table['Dmdotd'].info.format = '%.5f'
-        final_average_table['theta_w_esc'].info.format = '%.5e'
-        final_average_table['Dtheta_w_esc'].info.format = '%.5f'
-        final_average_table['lbol'].info.format = '%.5e'
-        final_average_table['Dlbol'].info.format = '%.5f'
-        final_average_table['lbol_iso'].info.format = '%.5e'
-        final_average_table['Dlbol_iso'].info.format = '%.5f'
-        final_average_table['lbol_av'].info.format = '%.5e'
-        final_average_table['Dlbol_av'].info.format = '%.5f'
-        final_average_table['t_now'].info.format = '%.5e'
-        final_average_table['Dt_now'].info.format = '%.5f'
-
+        # For format consistency
+        final_average_table["mcore"].info.format = "%.5f"
+        final_average_table["Dmcore"].info.format = "%.5f"
+        final_average_table["sigma"].info.format = "%.5f"
+        final_average_table["Dsigma"].info.format = "%.5f"
+        final_average_table["mstar"].info.format = "%.5f"
+        final_average_table["Dmstar"].info.format = "%.5f"
+        final_average_table["theta_view"].info.format = "%.5f"
+        final_average_table["Dtheta_view"].info.format = "%.5f"
+        final_average_table["av"].info.format = "%.5f"
+        final_average_table["Dav"].info.format = "%.5f"
+        final_average_table["rcore"].info.format = "%.5f"
+        final_average_table["Drcore"].info.format = "%.5f"
+        final_average_table["massenv"].info.format = "%.5f"
+        final_average_table["Dmassenv"].info.format = "%.5f"
+        final_average_table["theta_w_esc"].info.format = "%.5f"
+        final_average_table["Dtheta_w_esc"].info.format = "%.5f"
+        final_average_table["theta_w_esc"].info.format = "%.5f"
+        final_average_table["Dtheta_w_esc"].info.format = "%.5f"
+        final_average_table["rstar"].info.format = "%.5f"
+        final_average_table["Drstar"].info.format = "%.5f"
+        final_average_table["lstar"].info.format = "%.5e"
+        final_average_table["Dlstar"].info.format = "%.5f"
+        final_average_table["tstar"].info.format = "%.5e"
+        final_average_table["Dtstar"].info.format = "%.5f"
+        final_average_table["mdisk"].info.format = "%.5f"
+        final_average_table["Dmdisk"].info.format = "%.5f"
+        final_average_table["rdisk"].info.format = "%.5e"
+        final_average_table["Drdisk"].info.format = "%.5f"
+        final_average_table["mdotd"].info.format = "%.5e"
+        final_average_table["Dmdotd"].info.format = "%.5f"
+        final_average_table["theta_w_esc"].info.format = "%.5e"
+        final_average_table["Dtheta_w_esc"].info.format = "%.5f"
+        final_average_table["lbol"].info.format = "%.5e"
+        final_average_table["Dlbol"].info.format = "%.5f"
+        final_average_table["lbol_iso"].info.format = "%.5e"
+        final_average_table["Dlbol_iso"].info.format = "%.5f"
+        final_average_table["lbol_av"].info.format = "%.5e"
+        final_average_table["Dlbol_av"].info.format = "%.5f"
+        final_average_table["t_now"].info.format = "%.5e"
+        final_average_table["Dt_now"].info.format = "%.5f"
 
         if tablename is not None:
-            ascii.write(final_average_table,tablename)
-            print('Table saved in ',tablename)
+            ascii.write(final_average_table, tablename)
+            print("Table saved in ", tablename)
 
-            
         return final_average_table
 
-    #Indepent Plots
-    #TODO: Put all the plots in this class
+    # Indepent Plots
+    # TODO: Put all the plots in this class
+
 
 class PentagonPlot(object):
-    '''
+    """
     A class used to plot a pentagon plot
 
     Attributes
     ----------
     plot: method
         Creates the pentagon plot
-    '''
+    """
 
     # modified idea taken from
     # https://stackoverflow.com/questions/33028843/how-to-remove-polar-gridlines-and-add-major-axis-ticks
@@ -3209,9 +4973,14 @@ class PentagonPlot(object):
             rect = [0.05, 0.05, 0.95, 0.95]
 
         self.n = len(titles)
-        self.angles = [a if a <=360. else a - 360. for a in np.arange(90, 90+360, 360.0/self.n)]
-        self.axes = [fig.add_axes(rect, projection="polar", label="axes%d" % i)
-                         for i in range(self.n)]
+        self.angles = [
+            a if a <= 360.0 else a - 360.0
+            for a in np.arange(90, 90 + 360, 360.0 / self.n)
+        ]
+        self.axes = [
+            fig.add_axes(rect, projection="polar", label="axes%d" % i)
+            for i in range(self.n)
+        ]
 
         self.ax = self.axes[0]
         self.ax.set_thetagrids(self.angles, labels=titles, fontsize=10, color="black")
@@ -3223,12 +4992,17 @@ class PentagonPlot(object):
             self.ax.yaxis.grid(False)
 
         for ax, angle, label in zip(self.axes, self.angles, labels):
-            ax.set_rgrids(np.round(np.linspace(0.0,1.0,5),3), labels=label, angle=angle, fontsize=10)
+            ax.set_rgrids(
+                np.round(np.linspace(0.0, 1.0, 5), 3),
+                labels=label,
+                angle=angle,
+                fontsize=10,
+            )
             ax.spines["polar"].set_visible(False)
             ax.set_ylim(0, 1.0)
-            ax.xaxis.grid(True,color='black',linestyle='-')
-            pos=ax.get_rlabel_position()
-            ax.set_rlabel_position(pos+7)
+            ax.xaxis.grid(True, color="black", linestyle="-")
+            pos = ax.get_rlabel_position()
+            ax.set_rlabel_position(pos + 7)
 
     def __prepare_plot(self, values, *args, **kw):
         angle = np.deg2rad(np.r_[self.angles, self.angles[0]])
@@ -3236,42 +5010,68 @@ class PentagonPlot(object):
         self.ax.plot(angle, values, *args, **kw)
         self.ax.fill(angle, values, alpha=0.1)
 
-    #TODO: find out why when putting self in pentagon_plot it does not work
-    def plot(models,figname=None):
+    # TODO: find out why when putting self in pentagon_plot it does not work
+    def plot(models, figname=None):
 
-        models_phm = models['mcore','sigma','mstar','theta_view','av']
-        models_chisq = models['chisq']
+        models_phm = models["mcore", "sigma", "mstar", "theta_view", "av"]
+        models_chisq = models["chisq"]
 
         fig = plt.figure(figsize=(5, 5))
 
-        titles = [r'$M_\mathrm{c}$ ($M_\odot$)',
-                  r'$\Sigma$ ($\mathrm{g\,cm^{-2}}$)        ',
-                  r'$m_*$ ($M_\odot$)',
-                  r'      $\theta_\mathrm{view}$ ($\mathrm{deg}$)',
-                  r'        $A_V$ (mag)']
+        titles = [
+            r"$M_\mathrm{c}$ ($M_\odot$)",
+            r"$\Sigma$ ($\mathrm{g\,cm^{-2}}$)        ",
+            r"$m_*$ ($M_\odot$)",
+            r"      $\theta_\mathrm{view}$ ($\mathrm{deg}$)",
+            r"        $A_V$ (mag)",
+        ]
 
+        labels = [
+            np.round(np.linspace(0.0, 1.0, 5) * models_phm["mcore"].max(), 3),
+            np.round(np.linspace(0.0, 1.0, 5) * models_phm["sigma"].max(), 3),
+            np.round(np.linspace(0.0, 1.0, 5) * models_phm["mstar"].max(), 3),
+            np.round(np.linspace(0.0, 1.0, 5) * models_phm["theta_view"].max(), 2),
+            np.round(np.linspace(0.0, 1.0, 5) * models_phm["av"].max(), 2),
+        ]
 
-        labels = [np.round(np.linspace(0.0,1.0,5)*models_phm['mcore'].max(),3),
-                  np.round(np.linspace(0.0,1.0,5)*models_phm['sigma'].max(),3),
-                  np.round(np.linspace(0.0,1.0,5)*models_phm['mstar'].max(),3),
-                  np.round(np.linspace(0.0,1.0,5)*models_phm['theta_view'].max(),2),
-                  np.round(np.linspace(0.0,1.0,5)*models_phm['av'].max(),2)]
-
-        norm_models = np.array([models_phm['mcore'].max(),models_phm['sigma'].max(),models_phm['mstar'].max(),
-                                models_phm['theta_view'].max(),models_phm['av'].max()])
+        norm_models = np.array(
+            [
+                models_phm["mcore"].max(),
+                models_phm["sigma"].max(),
+                models_phm["mstar"].max(),
+                models_phm["theta_view"].max(),
+                models_phm["av"].max(),
+            ]
+        )
 
         penta_plot = PentagonPlot(fig, titles, labels)
-        #TODO: get rid of this try except.
-        #Temproary fix to avoid the function braking when only 1 row is provided
+        # TODO: get rid of this try except.
+        # Temproary fix to avoid the function braking when only 1 row is provided
         try:
             for i in range(len(models)):
-                penta_plot.__prepare_plot(np.array(list(models_phm[i]))/norm_models, "-", lw=1, alpha=.5, label=r'$\chi^2={0:.2f}$'.format(models_chisq[i]))
+                penta_plot.__prepare_plot(
+                    np.array(list(models_phm[i])) / norm_models,
+                    "-",
+                    lw=1,
+                    alpha=0.5,
+                    label=r"$\chi^2={0:.2f}$".format(models_chisq[i]),
+                )
         except:
-            penta_plot.__prepare_plot(np.array(list(models_phm))/norm_models, "-", lw=1, alpha=.5, label=r'$\chi^2={0:.2f}$'.format(models_chisq))
+            penta_plot.__prepare_plot(
+                np.array(list(models_phm)) / norm_models,
+                "-",
+                lw=1,
+                alpha=0.5,
+                label=r"$\chi^2={0:.2f}$".format(models_chisq),
+            )
 
-
-        penta_plot.ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.10),
-                             fancybox=True, shadow=True, ncol=5)
+        penta_plot.ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.10),
+            fancybox=True,
+            shadow=True,
+            ncol=5,
+        )
 
         fig = plt.gcf()
         fig.set_size_inches(5, 5, forward=True)
@@ -3280,11 +5080,11 @@ class PentagonPlot(object):
 
 
 class ModelPlotter(FitterContainer):
-    '''
+    """
     A class used to plot the SED model results
-    '''
+    """
 
-    def __init__(self,fittercontainer):
+    def __init__(self, fittercontainer):
         self.master_dir = fittercontainer.master_dir
         self.extc_law = fittercontainer.extc_law
         self.lambda_array = fittercontainer.lambda_array
@@ -3294,9 +5094,18 @@ class ModelPlotter(FitterContainer):
         self.dist = fittercontainer.dist
         self.__best_model = None
 
-
-    def plot_best_sed(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',markersize=6,title=None,figname=None):
-        '''
+    def plot_best_sed(
+        self,
+        models=None,
+        figsize=(6, 4),
+        xlim=[1.0, 1000.0],
+        ylim=[1.0e-12, 1.0e-5],
+        marker="k*",
+        markersize=6,
+        title=None,
+        figname=None,
+    ):
+        """
         Plots the best SED model
 
         Parameters
@@ -3331,41 +5140,68 @@ class ModelPlotter(FitterContainer):
         Returns
         ----------
         plot of the best SED
-        '''
+        """
 
         master_dir = self.master_dir
         norm_extc_law = self.extc_law
-        best_model = models[models['chisq']==models['chisq'].min()]
+        best_model = models[models["chisq"] == models["chisq"][0]]
 
         plt.figure(figsize=figsize)
-        sed_best = np.loadtxt(master_dir+'/Model_SEDs/sed/'+best_model['SED_number'].data[0]+'.dat',unpack=True)
-        lambda_model = sed_best[0] #micron
-        flux_model = sed_best[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*self.dist)**2.0) #from Lsun to erg s-1 cm-2
-        flux_model_extincted = flux_model*10.0**(-0.4*best_model['av'].data[0]*norm_extc_law)
-        plt.plot(lambda_model,flux_model_extincted,'k-',linewidth=1.0)
-        source_nu_Fnu = c_micron_s/self.lambda_array*self.flux_array*Jy2erg_s_cm2 #erg s-1 cm-2
-        #next two lines is to avoid lower limits with large errors
-        #to go out of the figure define a false 0.5 error for those marked as upper limit
-        error_flux_for_SED_plot = self.err_flux_array/self.flux_array
+        sed_best = np.loadtxt(
+            master_dir + "/Model_SEDs/sed/" + best_model["SED_number"].data[0] + ".dat",
+            unpack=True,
+        )
+        lambda_model = sed_best[0]  # micron
+        flux_model = (
+            sed_best[1] * Lsun2erg_s / (4.0 * np.pi * (pc2cm * self.dist) ** 2.0)
+        )  # from Lsun to erg s-1 cm-2
+        flux_model_extincted = flux_model * 10.0 ** (
+            -0.4 * best_model["av"].data[0] * norm_extc_law
+        )
+        plt.plot(lambda_model, flux_model_extincted, "k-", linewidth=1.0)
+        source_nu_Fnu = (
+            c_micron_s / self.lambda_array * self.flux_array * Jy2erg_s_cm2
+        )  # erg s-1 cm-2
+        # next two lines is to avoid lower limits with large errors
+        # to go out of the figure define a false 0.5 error for those marked as upper limit
+        error_flux_for_SED_plot = self.err_flux_array / self.flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
-        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,markersize=markersize,
-                     uplims=self.upper_limit_array)
+        plt.errorbar(
+            self.lambda_array,
+            source_nu_Fnu,
+            yerr=error_flux_for_SED_plot * source_nu_Fnu,
+            fmt=marker,
+            markersize=markersize,
+            uplims=self.upper_limit_array,
+        )
         plt.xlim(xlim)
         plt.ylim(ylim)
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.xlabel(r'$\lambda\,(\mathrm{\mu m})$')
-        plt.ylabel(r'$\nu F_\nu\,(\mathrm{erg\,s^{-1}\,cm^{-2}})$')
+        plt.xscale("log")
+        plt.yscale("log")
+        plt.xlabel(r"$\lambda\,(\mathrm{\mu m})$")
+        plt.ylabel(r"$\nu F_\nu\,(\mathrm{erg\,s^{-1}\,cm^{-2}})$")
         if title is not None:
             plt.title(title)
         if figname is not None:
             plt.savefig(figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',figname)
+            print("Image saved in ", figname)
         plt.show()
 
-
-    def plot_multiple_seds(self,models=None,figsize=(6,4),xlim=[1.0,1000.0],ylim=[1.0e-12,1.0e-5],marker='k*',markersize=6,cmap='rainbow_r',colorbar=True,title=None,figname=None):
-        '''
+    def plot_multiple_seds(
+        self,
+        models=None,
+        sorted_by="chisq_nonlim",
+        figsize=(6, 4),
+        xlim=[1.0, 1000.0],
+        ylim=[1.0e-12, 1.0e-5],
+        marker="k*",
+        markersize=6,
+        cmap="rainbow_r",
+        colorbar=True,
+        title=None,
+        figname=None,
+    ):
+        """
         Plots multiple SEDs.
 
         Parameters
@@ -3375,6 +5211,11 @@ class ModelPlotter(FitterContainer):
 
         figsize: tuple
             specify the size of the figure. Default is (6,4)
+
+        sorted_by: str
+            specify the chisq.
+            It can be either chisq (considering the upper limits in the calculation) ir chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         xlim: array
             array to specify the limits in the x axis. Default is [1.0,1000.0]
@@ -3406,69 +5247,140 @@ class ModelPlotter(FitterContainer):
         Returns
         ----------
         plot of the multiple SEDs
-        '''
+        """
+
+        if sorted_by not in ("chisq", "chisq_nonlim"):
+            raise ValueError("'sorted_by' must be either 'chisq', or 'chisq_nonlim'")
+
+        models.sort(sorted_by)
 
         master_dir = self.master_dir
         norm_extc_law = self.extc_law
 
-        cmap = plt.cm.ScalarMappable(cmap=cmap,
-                                     norm=colors.LogNorm(vmin=models['chisq'].min(),
-                                                         vmax=models['chisq'].max()))
-        #cmap.set_array([])
+        cmap = plt.cm.ScalarMappable(
+            cmap=cmap,
+            norm=colors.LogNorm(vmin=models[sorted_by][0], vmax=models[sorted_by][-1]),
+        )
+        # cmap.set_array([])
 
         plt.figure(figsize=figsize)
         for ind_mod in models:
-            sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+ind_mod['SED_number']+'.dat',unpack=True)
-            lambda_model = sed[0] #micron
-            flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*self.dist)**2.0) #from Lsun to erg s-1 cm-2
-            flux_model_extincted = flux_model*10.0**(-0.4*ind_mod['av']*norm_extc_law)
-            plt.plot(lambda_model,flux_model_extincted,'-',linewidth=0.5,zorder=-ind_mod['chisq'],c=cmap.to_rgba(ind_mod['chisq']))
+            sed = np.loadtxt(
+                master_dir + "/Model_SEDs/sed/" + ind_mod["SED_number"] + ".dat",
+                unpack=True,
+            )
+            lambda_model = sed[0]  # micron
+            flux_model = (
+                sed[1] * Lsun2erg_s / (4.0 * np.pi * (pc2cm * self.dist) ** 2.0)
+            )  # from Lsun to erg s-1 cm-2
+            flux_model_extincted = flux_model * 10.0 ** (
+                -0.4 * ind_mod["av"] * norm_extc_law
+            )
+            plt.plot(
+                lambda_model,
+                flux_model_extincted,
+                "-",
+                linewidth=0.5,
+                zorder=-ind_mod[sorted_by],
+                c=cmap.to_rgba(ind_mod[sorted_by]),
+            )
 
-        best_model = models[models['chisq']==models['chisq'].min()]
-        sed = np.loadtxt(master_dir+'/Model_SEDs/sed/'+best_model['SED_number'].data[0]+'.dat',unpack=True)
-        lambda_model = sed[0] #micron
-        flux_model = sed[1]*Lsun2erg_s/(4.0*np.pi*(pc2cm*self.dist)**2.0) #from Lsun to erg s-1 cm-2
-        flux_model_extincted = flux_model*10.0**(-0.4*best_model['av']*norm_extc_law)
-        plt.plot(lambda_model,flux_model_extincted,'k-',linewidth=1.0,zorder=-best_model['chisq'].data[0])
-        source_nu_Fnu = c_micron_s/self.lambda_array*self.flux_array*Jy2erg_s_cm2 #erg s-1 cm-2
-        #next two lines is to avoid lower limits with large errors
-        #to go out of the figure define a false 0.5 error for those marked as upper limit
-        error_flux_for_SED_plot = self.err_flux_array/self.flux_array
+        best_model = models[models[sorted_by] == models[sorted_by][0]]
+        sed = np.loadtxt(
+            master_dir + "/Model_SEDs/sed/" + best_model["SED_number"].data[0] + ".dat",
+            unpack=True,
+        )
+        lambda_model = sed[0]  # micron
+        flux_model = (
+            sed[1] * Lsun2erg_s / (4.0 * np.pi * (pc2cm * self.dist) ** 2.0)
+        )  # from Lsun to erg s-1 cm-2
+        flux_model_extincted = flux_model * 10.0 ** (
+            -0.4 * best_model["av"] * norm_extc_law
+        )
+        plt.plot(
+            lambda_model,
+            flux_model_extincted,
+            "k-",
+            linewidth=1.0,
+            zorder=-best_model[sorted_by].data[0],
+        )
+        source_nu_Fnu = (
+            c_micron_s / self.lambda_array * self.flux_array * Jy2erg_s_cm2
+        )  # erg s-1 cm-2
+        # next two lines is to avoid lower limits with large errors
+        # to go out of the figure define a false 0.5 error for those marked as upper limit
+        error_flux_for_SED_plot = self.err_flux_array / self.flux_array
         error_flux_for_SED_plot[self.upper_limit_array] = 0.5
-        
-        plt.errorbar(self.lambda_array,source_nu_Fnu,yerr=error_flux_for_SED_plot*source_nu_Fnu,fmt=marker,markersize=markersize,
-                     uplims=self.upper_limit_array)
+
+        plt.errorbar(
+            self.lambda_array,
+            source_nu_Fnu,
+            yerr=error_flux_for_SED_plot * source_nu_Fnu,
+            fmt=marker,
+            markersize=markersize,
+            uplims=self.upper_limit_array,
+        )
         plt.xlim(xlim)
         plt.ylim(ylim)
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.xlabel(r'$\lambda\,(\mathrm{\mu m})$')
-        plt.ylabel(r'$\nu F_\nu\,(\mathrm{erg\,s^{-1}\,cm^{-2}})$')
+        plt.xscale("log")
+        plt.yscale("log")
+        plt.xlabel(r"$\lambda\,(\mathrm{\mu m})$")
+        plt.ylabel(r"$\nu F_\nu\,(\mathrm{erg\,s^{-1}\,cm^{-2}})$")
         if title is not None:
             plt.title(title)
         if colorbar:
-            cbar = plt.colorbar(cmap,label=r'$\chi^2$')
+            cbar = plt.colorbar(mappable=cmap, ax=plt.gca(), label=r"$\chi^2$")
             cbar.minorticks_off()
-            cbar.set_ticks(np.logspace(np.log10(models['chisq'].min()),
-                                       np.log10(models['chisq'].max()),num=5))
-            #trick to consider the adecuate number of decimals in round
-            dec = int(np.floor(np.abs(np.log10(models['chisq'].min()))))+1 #it has to be an integer
-            cbar.set_ticklabels(np.around(np.logspace(np.log10(models['chisq'].min()),
-                                                      np.log10(models['chisq'].max()),num=5),decimals=dec))
+            cbar.set_ticks(
+                np.logspace(
+                    np.log10(models[sorted_by][0]),
+                    np.log10(models[sorted_by][-1]),
+                    num=5,
+                )
+            )
+            # trick to consider the adecuate number of decimals in round
+            dec = (
+                int(np.floor(np.abs(np.log10(models[sorted_by][0])))) + 1
+            )  # it has to be an integer
+            cbar.set_ticklabels(
+                np.around(
+                    np.logspace(
+                        np.log10(models[sorted_by][0]),
+                        np.log10(models[sorted_by][-1]),
+                        num=5,
+                    ),
+                    decimals=dec,
+                )
+            )
+
         if figname is not None:
             plt.savefig(figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',figname)
+            print("Image saved in ", figname)
         plt.show()
 
-
-    def plot2d(self,models,figsize=(10,5),marker='s',markersize=50,cmap='rainbow_r',title=None,figname=None):
-        '''
+    def plot2d(
+        self,
+        models,
+        sorted_by="chisq_nonlim",
+        figsize=(10, 5),
+        marker="s",
+        markersize=50,
+        cmap="rainbow_r",
+        title=None,
+        figname=None,
+    ):
+        """
         2D Plots of the SEDs results.
 
         Parameters
         ----------
         models: `astropy.table`
             Table with the sed results.
+
+        sorted_by: str
+            specify the chisq.
+            It can be either chisq (considering the upper limits in the calculation) ir chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         figsize: tuple
             specify the size of the figure. Default is (10,5)
@@ -3494,195 +5406,354 @@ class ModelPlotter(FitterContainer):
         Returns
         ----------
         plot the 2D results
-        '''
+        """
 
-        fig, axs = plt.subplots(1, 3, constrained_layout=True,figsize=figsize)
+        fig, axs = plt.subplots(1, 3, constrained_layout=True, figsize=figsize)
 
-        triple_MC_sigma = unique(models,keys=['mcore','sigma'])
+        triple_MC_sigma = unique(models, keys=["mcore", "sigma"])
+        triple_MC_sigma.sort(sorted_by)
         ax1 = axs[0]
-        sct1 = ax1.scatter(triple_MC_sigma['mcore'],
-                           triple_MC_sigma['sigma'],
-                           linewidths=1, alpha=.8,
-                           #edgecolor='k',
-                           s = markersize,
-                           c=triple_MC_sigma['chisq'],
-                           marker=marker,
-                           norm=colors.LogNorm(),
-                           cmap=cmap,
-                           zorder=-1)
+        sct1 = ax1.scatter(
+            triple_MC_sigma["mcore"],
+            triple_MC_sigma["sigma"],
+            linewidths=1,
+            alpha=0.8,
+            # edgecolor='k',
+            s=markersize,
+            c=triple_MC_sigma[sorted_by],
+            marker=marker,
+            norm=colors.LogNorm(),
+            cmap=cmap,
+            zorder=-1,
+        )
 
-        sct1_best = ax1.scatter(triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
-                                triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
-                                linewidths=1,
-                                alpha=1.0,
-                                s = 100,
-                                color='k',
-                                marker='+',
-                                zorder=1)
+        sct1_best = ax1.scatter(
+            triple_MC_sigma["mcore"][
+                triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+            ],
+            triple_MC_sigma["sigma"][
+                triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+            ],
+            linewidths=1,
+            alpha=1.0,
+            s=100,
+            color="k",
+            marker="+",
+            zorder=1,
+        )
 
-        ax1.set_xscale('log')
-        ax1.set_yscale('log')
+        ax1.set_xscale("log")
+        ax1.set_yscale("log")
 
-        ax1.plot([0,triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
-                 [triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
-                  triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
-                 'k--',alpha=0.1)
+        ax1.plot(
+            [
+                0,
+                triple_MC_sigma["mcore"][
+                    triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+                ].value[0],
+            ],
+            [
+                triple_MC_sigma["sigma"][
+                    triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+                ].value[0],
+                triple_MC_sigma["sigma"][
+                    triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+                ].value[0],
+            ],
+            "k--",
+            alpha=0.1,
+        )
 
-        ax1.plot([triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()],
-                  triple_MC_sigma['mcore'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
-                 [0,triple_MC_sigma['sigma'][triple_MC_sigma['chisq']==triple_MC_sigma['chisq'].min()]],
-                 'k--',alpha=0.1)
+        ax1.plot(
+            [
+                triple_MC_sigma["mcore"][
+                    triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+                ].value[0],
+                triple_MC_sigma["mcore"][
+                    triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+                ].value[0],
+            ],
+            [
+                0,
+                triple_MC_sigma["sigma"][
+                    triple_MC_sigma[sorted_by] == triple_MC_sigma[sorted_by][0]
+                ].value[0],
+            ],
+            "k--",
+            alpha=0.1,
+        )
 
+        ax1.set_xlim(8.0, 600.0)
+        ax1.set_ylim(0.05, 4.0)
 
-        ax1.set_xlim(8.0,600.0)
-        ax1.set_ylim(0.05,4.0)
+        ax1.set_xticks([10.0, 40.0, 120.0, 480.0])  # mc
+        ax1.set_yticks([0.1, 0.316, 1.0, 3.16])  # sigma
 
-        ax1.set_xticks([10.0,40.0,120.0,480.0])
-        ax1.set_yticks(np.unique(models['sigma']))
+        ax1.set_xticklabels([10.0, 40.0, 120.0, 480.0])  # mc
+        ax1.set_yticklabels([0.1, 0.316, 1.0, 3.16])  # sigma
 
-        ax1.set_xticklabels([10.0,40.0,120.0,480.0])
-        ax1.set_yticklabels(np.unique(models['sigma']))
+        ax1.minorticks_off()  # turning off minor ticks
 
-        ax1.minorticks_off()#turning off minor ticks
+        ax1.set_xlabel(r"$M_\mathrm{c}\,(M_\odot)$")
+        ax1.set_ylabel(r"$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$")
 
-        ax1.set_xlabel(r'$M_\mathrm{c}\,(M_\odot)$')
-        ax1.set_ylabel(r'$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$')
+        ax1.set_aspect(1.0 / ax1.get_data_ratio(), adjustable="box")
 
-        ax1.set_aspect(1.0/ax1.get_data_ratio(), adjustable='box')
-
-
-        triple_MC_ms = unique(models,keys=['mcore','mstar'])
+        triple_MC_ms = unique(models, keys=["mcore", "mstar"])
+        triple_MC_ms.sort(sorted_by)
         ax2 = axs[1]
-        sct2 = ax2.scatter(triple_MC_ms['mcore'],
-                           triple_MC_ms['mstar'],
-                           linewidths=1,
-                           alpha=.8,
-                           #edgecolor='k',
-                           s = markersize,
-                           c=triple_MC_ms['chisq'],
-                           marker=marker,
-                           norm=colors.LogNorm(),
-                           cmap=cmap,
-                           zorder=-1)
+        sct2 = ax2.scatter(
+            triple_MC_ms["mcore"],
+            triple_MC_ms["mstar"],
+            linewidths=1,
+            alpha=0.8,
+            # edgecolor='k',
+            s=markersize,
+            c=triple_MC_ms[sorted_by],
+            marker=marker,
+            norm=colors.LogNorm(),
+            cmap=cmap,
+            zorder=-1,
+        )
 
-        sct2_best = ax2.scatter(triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
-                                triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
-                                linewidths=1,
-                                alpha=1.0,
-                                s = 100,
-                                color='k',
-                                marker='+',
-                                zorder=1)
+        sct2_best = ax2.scatter(
+            triple_MC_ms["mcore"][
+                triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+            ],
+            triple_MC_ms["mstar"][
+                triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+            ],
+            linewidths=1,
+            alpha=1.0,
+            s=100,
+            color="k",
+            marker="+",
+            zorder=1,
+        )
 
-        ax2.set_xscale('log')
-        ax2.set_yscale('log')
+        ax2.set_xscale("log")
+        ax2.set_yscale("log")
 
-        ax2.plot([0,triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
-                 [triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
-                  triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
-                 'k--',alpha=0.1)
+        ax2.plot(
+            [
+                0,
+                triple_MC_ms["mcore"][
+                    triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+                ].value[0],
+            ],
+            [
+                triple_MC_ms["mstar"][
+                    triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+                ].value[0],
+                triple_MC_ms["mstar"][
+                    triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+                ].value[0],
+            ],
+            "k--",
+            alpha=0.1,
+        )
 
-        ax2.plot([triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()],
-                  triple_MC_ms['mcore'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
-                 [0,triple_MC_ms['mstar'][triple_MC_ms['chisq']==triple_MC_ms['chisq'].min()]],
-                 'k--',alpha=0.1)
+        ax2.plot(
+            [
+                triple_MC_ms["mcore"][
+                    triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+                ].value[0],
+                triple_MC_ms["mcore"][
+                    triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+                ].value[0],
+            ],
+            [
+                0,
+                triple_MC_ms["mstar"][
+                    triple_MC_ms[sorted_by] == triple_MC_ms[sorted_by][0]
+                ].value[0],
+            ],
+            "k--",
+            alpha=0.1,
+        )
 
-        ax2.set_xlim(8.0,600.0)
-        ax2.set_ylim(0.4,200.0)
+        ax2.set_xlim(8.0, 600.0)
+        ax2.set_ylim(0.4, 200.0)
 
-        ax2.set_xticks([10.0,40.0,120.0,480.0])
-        ax2.set_yticks([0.5,2.0,8.0,32.0,128.0])
+        ax2.set_xticks([10.0, 40.0, 120.0, 480.0])  # mc
+        ax2.set_yticks([0.5, 2.0, 8.0, 32.0, 128.0])  # m*
 
-        ax2.set_xticklabels([10.0,40.0,120.0,480.0])
-        ax2.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
+        ax2.set_xticklabels([10.0, 40.0, 120.0, 480.0])  # mc
+        ax2.set_yticklabels([0.5, 2.0, 8.0, 32.0, 128.0])  # m*
 
-        ax2.minorticks_off()#turning off minor ticks
+        ax2.minorticks_off()  # turning off minor ticks
 
-        ax2.set_xlabel(r'$M_\mathrm{c}\,(M_\odot)$')
-        ax2.set_ylabel(r'$m_*\,(M_\odot)$')
+        ax2.set_xlabel(r"$M_\mathrm{c}\,(M_\odot)$")
+        ax2.set_ylabel(r"$m_*\,(M_\odot)$")
 
-        ax2.set_aspect(1.0/ax2.get_data_ratio(), adjustable='box')
+        ax2.set_aspect(1.0 / ax2.get_data_ratio(), adjustable="box")
 
-
-        triple_sigma_ms = unique(models,keys=['sigma','mstar'])
+        triple_sigma_ms = unique(models, keys=["sigma", "mstar"])
+        triple_sigma_ms.sort(sorted_by)
         ax3 = axs[2]
-        sct3 = ax3.scatter(triple_sigma_ms['sigma'],
-                           triple_sigma_ms['mstar'],
-                           linewidths=1,
-                           alpha=.8,
-                           #edgecolor='k',
-                           s = markersize,
-                           c=triple_sigma_ms['chisq'],
-                           marker=marker,
-                           norm=colors.LogNorm(),
-                           cmap=cmap,
-                           zorder=-1)
+        sct3 = ax3.scatter(
+            triple_sigma_ms["sigma"],
+            triple_sigma_ms["mstar"],
+            linewidths=1,
+            alpha=0.8,
+            # edgecolor='k',
+            s=markersize,
+            c=triple_sigma_ms[sorted_by],
+            marker=marker,
+            norm=colors.LogNorm(),
+            cmap=cmap,
+            zorder=-1,
+        )
 
-        sct3_best = ax3.scatter(triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
-                                triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
-                                linewidths=1,
-                                alpha=1.0,
-                                s = 100,
-                                color='k',
-                                marker='+',
-                                zorder=1)
+        sct3_best = ax3.scatter(
+            triple_sigma_ms["sigma"][
+                triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+            ],
+            triple_sigma_ms["mstar"][
+                triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+            ],
+            linewidths=1,
+            alpha=1.0,
+            s=100,
+            color="k",
+            marker="+",
+            zorder=1,
+        )
 
-        ax3.set_xscale('log')
-        ax3.set_yscale('log')
+        ax3.set_xscale("log")
+        ax3.set_yscale("log")
 
-        ax3.plot([0.0,triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
-                 [triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
-                  triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
-                 'k--',alpha=0.1)
+        ax3.plot(
+            [
+                0.0,
+                triple_sigma_ms["sigma"][
+                    triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+                ].value[0],
+            ],
+            [
+                triple_sigma_ms["mstar"][
+                    triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+                ].value[0],
+                triple_sigma_ms["mstar"][
+                    triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+                ].value[0],
+            ],
+            "k--",
+            alpha=0.1,
+        )
 
-        ax3.plot([triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()],
-                  triple_sigma_ms['sigma'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
-                 [0.0,triple_sigma_ms['mstar'][triple_sigma_ms['chisq']==triple_sigma_ms['chisq'].min()]],
-                 'k--',alpha=0.1)
+        ax3.plot(
+            [
+                triple_sigma_ms["sigma"][
+                    triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+                ].value[0],
+                triple_sigma_ms["sigma"][
+                    triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+                ].value[0],
+            ],
+            [
+                0.0,
+                triple_sigma_ms["mstar"][
+                    triple_sigma_ms[sorted_by] == triple_sigma_ms[sorted_by][0]
+                ].value[0],
+            ],
+            "k--",
+            alpha=0.1,
+        )
 
+        ax3.set_xlim(0.05, 4.0)
+        ax3.set_ylim(0.4, 200.0)
 
-        ax3.set_xlim(0.05,4.0)
-        ax3.set_ylim(0.4,200.0)
+        ax3.set_xticks([0.1, 0.316, 1.0, 3.16])  # sigma
+        ax3.set_yticks([0.5, 2.0, 8.0, 32.0, 128.0])  # m*
 
-        ax3.set_xticks(np.unique(models['sigma']))
-        ax3.set_yticks([0.5,2.0,8.0,32.0,128.0])
+        ax3.set_xticklabels([0.1, 0.316, 1.0, 3.16])  # sigma
+        ax3.set_yticklabels([0.5, 2.0, 8.0, 32.0, 128.0])  # m*
 
-        ax3.set_xticklabels(np.unique(models['sigma']))
-        ax3.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
+        ax3.minorticks_off()  # turning off minor ticks
 
-        ax3.minorticks_off()#turning off minor ticks
+        ax3.set_xlabel(r"$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$")
+        ax3.set_ylabel(r"$m_*\,(M_\odot)$")
 
-        ax3.set_xlabel(r'$\Sigma_\mathrm{cl}\,(\mathrm{g\,cm^{-2}})$')
-        ax3.set_ylabel(r'$m_*\,(M_\odot)$')
+        ax3.set_aspect(1.0 / ax3.get_data_ratio(), adjustable="box")
 
-        ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
+        # Workaround to have the colobar span all models not only unique ones.
+        # This is important to keep consistency cbars with sed plot
+        models.sort(sorted_by)
+        sct_cb = ax3.scatter(
+            -models["sigma"],
+            -models["mstar"],
+            linewidths=1,
+            alpha=1.0,
+            # edgecolor='k',
+            s=markersize,
+            c=models[sorted_by],
+            marker=marker,
+            norm=colors.LogNorm(),
+            cmap=cmap,
+            zorder=-1,
+        )
 
-        cbar = fig.colorbar(sct3,label=r'$\chi^2$',shrink=0.36,pad=0.01,orientation='vertical',ax=axs)
+        cbar = fig.colorbar(
+            sct_cb,
+            label=r"$\chi^2$",
+            shrink=0.36,
+            pad=0.01,
+            orientation="vertical",
+            ax=axs,
+        )
         cbar.minorticks_off()
-        cbar.set_ticks(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
-                                   np.log10(triple_sigma_ms['chisq'].max()),num=5))
-        #trick to consider the adecuate number of decimals in round
-        dec = int(np.floor(np.abs(np.log10(triple_sigma_ms['chisq'].min()))))+1 #it has to be an integer
-        cbar.set_ticklabels(np.around(np.logspace(np.log10(triple_sigma_ms['chisq'].min()),
-                                                  np.log10(triple_sigma_ms['chisq'].max()),num=5),decimals=dec))
+        cbar.set_ticks(
+            np.logspace(
+                np.log10(models[sorted_by][0]), np.log10(models[sorted_by][-1]), num=5
+            )
+        )
+        # trick to consider the adecuate number of decimals in round
+        dec = (
+            int(np.floor(np.abs(np.log10(models[sorted_by][0])))) + 1
+        )  # it has to be an integer
+        cbar.set_ticklabels(
+            np.around(
+                np.logspace(
+                    np.log10(models[sorted_by][0]),
+                    np.log10(models[sorted_by][-1]),
+                    num=5,
+                ),
+                decimals=dec,
+            )
+        )
 
         if title is not None:
-            fig.suptitle(title,y=0.8)
+            fig.suptitle(title, y=0.8)
 
         if figname is not None:
             plt.savefig(figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',figname)
+            print("Image saved in ", figname)
 
         plt.show()
 
-    def plot3d(self,models,figsize=(8,8),markersize=200,cmap='rainbow_r',title=None,figname=None):
-        '''
+    def plot3d(
+        self,
+        models,
+        sorted_by="chisq_nonlim",
+        figsize=(8, 8),
+        markersize=200,
+        cmap="rainbow_r",
+        title=None,
+        figname=None,
+    ):
+        """
         3D plot for the SED model results
 
         Parameters
         ----------
         models: `astropy.table`
             Table with the sed results.
+
+        sorted_by: str
+            specify the chisq.
+            It can be either chisq (considering the upper limits in the calculation) ir chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         figsize: tuple
             specify the size of the figure. Default is (8,8)
@@ -3705,72 +5776,87 @@ class ModelPlotter(FitterContainer):
         Returns
         ----------
         plot the 3D results
-        '''
+        """
+
+        models.sort(sorted_by)
+
         fig = plt.figure(figsize=figsize)
-        ax = fig.add_subplot(111, projection='3d')
-        sct = ax.scatter(np.log10(models['mcore']),
-                         np.log10(models['mstar']),
-                         np.log10(models['sigma']),
-                         linewidths=1, alpha=.8,
-                         edgecolor='k',
-                         s = markersize,
-                         c=models['chisq'],
-                         norm=colors.LogNorm(),
-                         cmap=cmap,
-                         zorder=-1)
+        ax = fig.add_subplot(111, projection="3d")
+        sct = ax.scatter(
+            np.log10(models["mcore"]),
+            np.log10(models["mstar"]),
+            np.log10(models["sigma"]),
+            linewidths=1,
+            alpha=0.8,
+            edgecolor="k",
+            s=markersize,
+            c=models["chisq"],
+            norm=colors.LogNorm(),
+            cmap=cmap,
+            zorder=-1,
+        )
 
-        cbar = fig.colorbar(sct,label=r'$\chi^2$',shrink=0.5,pad=0.1)
-        cbar.set_ticks([np.min(models['chisq']),5,10,50,
-                        np.max(models['chisq'])])
-        cbar.set_ticklabels([np.around(np.min(models['chisq']),
-                                       decimals=1),5, 10,50,np.around(np.max(models['chisq']),decimals=1)])
+        cbar = fig.colorbar(sct, label=r"$\chi^2$", shrink=0.5, pad=0.1)
+        cbar.set_ticks([np.min(models["chisq"]), 5, 10, 50, np.max(models["chisq"])])
+        cbar.set_ticklabels(
+            [
+                np.around(np.min(models["chisq"]), decimals=1),
+                5,
+                10,
+                50,
+                np.around(np.max(models["chisq"]), decimals=1),
+            ]
+        )
 
-        #plot the best 5 models
-        sct = ax.scatter(np.log10(models['mcore'])[0:5],
-                         np.log10(models['mstar'])[0:5],
-                         np.log10(models['sigma'])[0:5],
-                         linewidths=1, alpha=.8,
-                         edgecolor='k',
-                         s = 100,
-                         color='k',
-                         marker='.',
-                         zorder=1)
+        # plot the best 5 models
+        sct = ax.scatter(
+            np.log10(models["mcore"])[0:5],
+            np.log10(models["mstar"])[0:5],
+            np.log10(models["sigma"])[0:5],
+            linewidths=1,
+            alpha=0.8,
+            edgecolor="k",
+            s=100,
+            color="k",
+            marker=".",
+            zorder=1,
+        )
 
-        ax.set_xlabel(r'$M_c\,(M_\odot)$')
-        ax.set_ylabel(r'$m_*\,(M_\odot)$')
-        ax.set_zlabel(r'$\Sigma\,(\mathrm{g\,cm^{-2}})$')
+        ax.set_xlabel(r"$M_c\,(M_\odot)$")
+        ax.set_ylabel(r"$m_*\,(M_\odot)$")
+        ax.set_zlabel(r"$\Sigma\,(\mathrm{g\,cm^{-2}})$")
 
-        ax.set_xticks(np.log10([10.0,40.0,120.0,480.0]))
-        ax.set_yticks(np.log10([0.5,2.0,8.0,32.0,128.0]))
-        ax.set_zticks(np.log10([0.1,0.316,1.0,3.16]))
+        ax.set_xticks(np.log10([10.0, 40.0, 120.0, 480.0]))
+        ax.set_yticks(np.log10([0.5, 2.0, 8.0, 32.0, 128.0]))
+        ax.set_zticks(np.log10([0.1, 0.316, 1.0, 3.16]))
 
-        ax.set_xticklabels([10.0,40.0,120.0,480.0])
-        ax.set_yticklabels([0.5,2.0,8.0,32.0,128.0])
-        ax.set_zticklabels([0.1,0.316,1.0,3.16])
+        ax.set_xticklabels([10.0, 40.0, 120.0, 480.0])
+        ax.set_yticklabels([0.5, 2.0, 8.0, 32.0, 128.0])
+        ax.set_zticklabels([0.1, 0.316, 1.0, 3.16])
 
-        #setting the viewing defaults
+        # setting the viewing defaults
         ax.azim = -60
         ax.dist = 10
         ax.elev = 15
 
-        #plotting eye-guide planes
-        x_mesh = np.arange(models['mcore'].min(),models['mcore'].max())
-        y_mesh = np.arange(models['mstar'].min(),models['mstar'].max())
+        # plotting eye-guide planes
+        x_mesh = np.arange(models["mcore"][0], models["mcore"][-1])
+        y_mesh = np.arange(models["mstar"][0], models["mstar"][-1])
 
-        xx, yy = np.meshgrid(x_mesh,y_mesh)
+        xx, yy = np.meshgrid(x_mesh, y_mesh)
 
         zz = np.zeros((np.shape(xx)))
 
-        ax.plot_surface(np.log10(xx),np.log10(yy),np.log10(zz+3.16),alpha=0.1)
-        ax.plot_surface(np.log10(xx),np.log10(yy),np.log10(zz+1.0),alpha=0.1)
-        ax.plot_surface(np.log10(xx),np.log10(yy),np.log10(zz+0.316),alpha=0.1)
-        ax.plot_surface(np.log10(xx),np.log10(yy),np.log10(zz+0.1),alpha=0.1)
+        ax.plot_surface(np.log10(xx), np.log10(yy), np.log10(zz + 3.16), alpha=0.1)
+        ax.plot_surface(np.log10(xx), np.log10(yy), np.log10(zz + 1.0), alpha=0.1)
+        ax.plot_surface(np.log10(xx), np.log10(yy), np.log10(zz + 0.316), alpha=0.1)
+        ax.plot_surface(np.log10(xx), np.log10(yy), np.log10(zz + 0.1), alpha=0.1)
 
         if title is not None:
             plt.title(title)
 
         if figname is not None:
             plt.savefig(figname, dpi=300, bbox_inches="tight")
-            print('Image saved in ',figname)
+            print("Image saved in ", figname)
 
         plt.show()
