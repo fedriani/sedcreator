@@ -62,14 +62,8 @@ User Documentation
     SedFluxer.rst
     optimal_aperture.rst
     error_estimation.rst
+    pixel_scale.rst
     SedFitter.rst
     filters.rst
     average_model.rst
     sedcreator.rst
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

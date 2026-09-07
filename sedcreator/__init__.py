@@ -11,7 +11,6 @@ from scipy.stats import gstd, gmean
 from scipy.spatial import distance
 
 from matplotlib import rcParams
-
 rcParams["font.sans-serif"] = ["Times"]
 rcParams["pdf.use14corefonts"] = True
 rcParams["font.family"] = "serif"
@@ -32,14 +31,9 @@ from astropy.visualization import simple_norm
 from astropy.stats import sigma_clipped_stats
 from astropy.constants import c, m_e, m_n, m_p
 
-# from photutils import aperture_photometry
-# from photutils import CircularAperture, CircularAnnulus
-from reproject import reproject_interp, reproject_exact
-
 from astropy.nddata.utils import Cutout2D
 from reproject import reproject_interp, reproject_exact
 from matplotlib.ticker import FuncFormatter
-
 
 from photutils.aperture import aperture_photometry
 from photutils.aperture import CircularAperture, CircularAnnulus
@@ -50,9 +44,11 @@ Lsun2erg_s = u.L_sun.to(u.erg * u.s**-1)
 c_micron_s = c.to(u.micron * u.s**-1).value
 Jy2erg_s_cm2 = u.Jy.to(u.erg * u.s**-1 * u.cm**-2 * u.Hz**-1)
 
+#constants for SedFluxer
+MJy_sr_degsq2Jy = (u.MJy*u.sr**-1*u.deg**2).to(u.Jy)
+
 # to track the version
 __version__ = "2.0.0"
-
 
 class FluxerContainer:
     """
@@ -132,33 +128,31 @@ class FluxerContainer:
         data, header = self.data
         flux_method = self.flux_method
 
-        # retrieves the pixel scale or size from the header
-        if "CD1_1" in header:
-            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
-        elif "CDELT1" in header:
-            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
+        #retrieve the pixel scale based on the header
+        #DISCLAMER: The header is assumed to be right and pixels are squares, the user should check this
+        if 'CD1_1' in header:
+            if 'CD2_1' in header:
+                pixel_scale_deg = (header['CD1_1']**2+header['CD2_1']**2)**0.5 #deg
+            elif 'CD2_1' not in header:
+                pixel_scale_deg = (header['CD1_1']**2)**0.5 #deg
+            else:
+                raise Exception('Problem with CD values, check image header')
+        elif 'CDELT1' in header:
+            pixel_scale_deg = (header['CDELT1']**2)**0.5 #deg
         else:
-            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
+            raise Exception('No CD nor CDELT were found in the header, so no pixscale could be retrieved')
+        pixel_scale_arcsec = pixel_scale_deg*3600.0 #arcsec
 
-        print(
-            "The aperture used is",
-            round(self.aper_rad_pixel * pixel_scale, 3),
-            "arcsec",
-        )
-        print("pixel scale is", round(pixel_scale, 3), "arcsec/pixel")
-        print(
-            "~",
-            round(self.aper_rad_pixel, 3),
-            "pixels are used for the aperture radius",
-        )
-        if "BUNIT" in header:
-            print("units in the image are:", header["BUNIT"])
-        elif "FUNITS" in header:
-            print("units in the image are:", header["FUNITS"])
-        elif (
-            "COMMENT" in header and len(header["COMMENT"]) >= 17
-        ):  # work around to print date in WISE data
-            print("units in the image are:", header["COMMENT"][17])
+
+        print('The aperture used is', round(self.aper_rad_pixel*pixel_scale_arcsec,3), 'arcsec')
+        print('pixel scale is', round(pixel_scale_arcsec,3), 'arcsec/pixel')
+        print('~',round(self.aper_rad_pixel,3),'pixels are used for the aperture radius')
+        if 'BUNIT' in header:
+            print('units in the image are:', header['BUNIT'])
+        elif 'FUNITS' in header:
+                print('units in the image are:', header['FUNITS'])
+        elif 'COMMENT' in header and len(header['COMMENT'])>=17: #work around to print date in WISE data
+            print('units in the image are:',header['COMMENT'][17])
         else:
             print("No BUNIT nor FUNITS key in the header")
 
@@ -505,33 +499,37 @@ class SedFluxer:
         ):
             print("WARNING: Source not in image. No values will be returned.")
             return None
-
-        # retrieves the pixel scale or size from the header
-        if "CD1_1" in header:
-            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
-        elif "CDELT1" in header:
-            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
+        
+        #retrieve the pixel scale based on the header
+        #DISCLAMER: The header is assumed to be right and pixels are squares, the user should check this
+        if 'CD1_1' in header:
+            if 'CD2_1' in header:
+                pixel_scale_deg = (header['CD1_1']**2+header['CD2_1']**2)**0.5 #deg
+            elif 'CD2_1' not in header:
+                pixel_scale_deg = (header['CD1_1']**2)**0.5 #deg
+            else:
+                raise Exception('Problem with CD values, check image header')
+        elif 'CDELT1' in header:
+            pixel_scale_deg = (header['CDELT1']**2)**0.5 #deg
         else:
-            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
+            raise Exception('No CD nor CDELT were found in the header, so no pixscale could be retrieved')
+        pixel_scale_arcsec = pixel_scale_deg*3600.0 #arcsec
 
-        # defines the aperture size in pixels
-        aper_rad_pixel = aper_rad / pixel_scale
-        inner_annu_pixel = inner_annu / pixel_scale
-        outer_annu_pixel = outer_annu / pixel_scale
-        aperture = CircularAperture([[x_source, y_source]], r=aper_rad_pixel)
-        annulus_aperture = CircularAnnulus(
-            [[x_source, y_source]], r_in=inner_annu_pixel, r_out=outer_annu_pixel
-        )
+        #defines the aperture size in pixels
+        aper_rad_pixel = aper_rad/pixel_scale_arcsec
+        inner_annu_pixel = inner_annu/pixel_scale_arcsec
+        outer_annu_pixel = outer_annu/pixel_scale_arcsec
+        aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
+        annulus_aperture = CircularAnnulus([[x_source,y_source]],
+                                           r_in=inner_annu_pixel, r_out=outer_annu_pixel)
 
-        aperture_area = (
-            aperture.area
-        )  # main area for corrective factor in fluctuation estimation when masked
+        aperture_area = aperture.area #main area for corrective factor in fluctuation estimation when masked
+        
+        #here is the main code for the aperture photometry
+        #--> START of the aperture photometry block
+        annulus_masks = annulus_aperture.to_mask(method='center')
 
-        # here is the main code for the aperture photometry
-        # --> START of the aperture photometry block
-        annulus_masks = annulus_aperture.to_mask(method="center")
-
-        error = 0.1 * data
+        error = 0.1*data
         bkg_median = []
         for annu_mask in annulus_masks:
             if type(mask) is np.ndarray:
@@ -762,110 +760,26 @@ class SedFluxer:
                 )
 
         else:
-            # Conversion from MJy/sr to Jy/pixel
-            if "BUNIT" in header:
-                if (
-                    "MJy/sr" in header["BUNIT"] or "MJY/SR" in header["BUNIT"]
-                ):  # mainly for Herschel and some Spitzer data (and IRAS)
-                    if "CD1_1" in header:
-                        flux_bkgsub = (
-                            ap_phot["aper_sum_bkgsub"].data[0]
-                            * 304.6
-                            * (np.absolute(header["CD1_1"])) ** 2
-                        )  # Jy
-                        flux = (
-                            ap_phot["aperture_sum"].data[0]
-                            * 304.6
-                            * (np.absolute(header["CD1_1"])) ** 2
-                        )  # Jy
-                        bkg = (
-                            ap_phot["aper_bkg"].data[0]
-                            * 304.6
-                            * (np.absolute(header["CD1_1"])) ** 2
-                        )  # Jy
-                        fluc_error = (
-                            fluc_error * 304.6 * (np.absolute(header["CD1_1"])) ** 2
-                        )  # Jy
-                    elif "CDELT1" in header:
-                        flux_bkgsub = (
-                            ap_phot["aper_sum_bkgsub"].data[0]
-                            * 304.6
-                            * (np.absolute(header["CDELT1"])) ** 2
-                        )  # Jy
-                        flux = (
-                            ap_phot["aperture_sum"].data[0]
-                            * 304.6
-                            * (np.absolute(header["CDELT1"])) ** 2
-                        )  # Jy
-                        bkg = (
-                            ap_phot["aper_bkg"].data[0]
-                            * 304.6
-                            * (np.absolute(header["CDELT1"])) ** 2
-                        )  # Jy
-                        fluc_error = (
-                            fluc_error * 304.6 * (np.absolute(header["CDELT1"])) ** 2
-                        )  # Jy
+            if 'BUNIT' in header:
+                if 'MJy/sr' in header['BUNIT'] or 'MJY/SR' in header['BUNIT']: #mainly for Herschel and some Spitzer data (and IRAS)
+                    flux_bkgsub = ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
+                    flux = ap_phot['aperture_sum'].data[0]*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
+                    bkg = ap_phot['aper_bkg'].data[0]*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
+                    fluc_error = fluc_error*pixel_scale_deg**2*MJy_sr_degsq2Jy #Jy
+                elif 'Jy/beam' in header['BUNIT']:#mainly for ALMA data or some other radio data
+                    #TODO: Check for other beam header posibilities
+                    beam = np.pi/(4.0*np.log(2.0))*header['BMAJ']*header['BMIN']
+                    if 'mJy/beam' in header['BUNIT']:
+                        unit_factor_Jy = 0.001 #from mJy to Jy
                     else:
-                        raise Exception(
-                            "Neither CD1_1 nor CDELT1 were found in the header"
-                        )
-                elif (
-                    "Jy/beam" in header["BUNIT"]
-                ):  # mainly for ALMA data or some other radio data
-                    beam = np.pi / (4.0 * np.log(2.0)) * header["BMAJ"] * header["BMIN"]
-                    if "mJy/beam" in header["BUNIT"]:
-                        unit_factor_Jy = 0.001  # from mJy to Jy
-                    else:
-                        unit_factor_Jy = 1.0  # leave it in Jy
-                    if "CD1_1" in header:
-                        flux_bkgsub = (
-                            unit_factor_Jy
-                            * ap_phot["aper_sum_bkgsub"].data[0]
-                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
-                        )  # Jy
-                        flux = (
-                            unit_factor_Jy
-                            * ap_phot["aperture_sum"].data[0]
-                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
-                        )  # Jy
-                        bkg = (
-                            unit_factor_Jy
-                            * ap_phot["aper_bkg"].data[0]
-                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
-                        )  # Jy
-                        fluc_error = (
-                            unit_factor_Jy
-                            * fluc_error
-                            / (beam / (np.absolute(header["CD1_1"])) ** 2)
-                        )  # Jy
-                    elif "CDELT1" in header:
-                        flux_bkgsub = (
-                            unit_factor_Jy
-                            * ap_phot["aper_sum_bkgsub"].data[0]
-                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
-                        )  # Jy
-                        flux = (
-                            unit_factor_Jy
-                            * ap_phot["aperture_sum"].data[0]
-                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
-                        )  # Jy
-                        bkg = (
-                            unit_factor_Jy
-                            * ap_phot["aper_bkg"].data[0]
-                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
-                        )  # Jy
-                        fluc_error = (
-                            unit_factor_Jy
-                            * fluc_error
-                            / (beam / (np.absolute(header["CDELT1"])) ** 2)
-                        )  # Jy
-                    else:
-                        raise Exception(
-                            "Neither CD1_1 nor CDELT1 were found in the header"
-                        )
-                elif "Jy/pix" in header["BUNIT"]:
-                    if "mJy/pix" in header["BUNIT"]:
-                        unit_factor_Jy = 0.001  # from mJy to Jy
+                        unit_factor_Jy = 1.0 #leave it in Jy
+                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]/(beam/pixel_scale_deg**2) #Jy
+                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]/(beam/pixel_scale_deg**2) #Jy
+                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]/(beam/pixel_scale_deg**2) #Jy
+                    fluc_error = unit_factor_Jy*fluc_error/(beam/pixel_scale_deg**2) #Jy
+                elif 'Jy/pix' in header['BUNIT']:
+                    if 'mJy/pix' in header['BUNIT']:
+                        unit_factor_Jy = 0.001 #from mJy to Jy
                     else:
                         unit_factor_Jy = 1.0  # leave it in Jy
                     flux_bkgsub = (
@@ -914,21 +828,11 @@ class SedFluxer:
                     if "mJy/sq-arc" in header["FUNITS"]:
                         unit_factor_Jy = 0.001  # from mJy to Jy
                     else:
-                        unit_factor_Jy = 1.0  # leave it in Jy
-                    flux_bkgsub = (
-                        unit_factor_Jy
-                        * ap_phot["aper_sum_bkgsub"].data[0]
-                        * pixel_scale**2
-                    )  # Jy
-                    flux = (
-                        unit_factor_Jy
-                        * ap_phot["aperture_sum"].data[0]
-                        * pixel_scale**2
-                    )  # Jy
-                    bkg = (
-                        unit_factor_Jy * ap_phot["aper_bkg"].data[0] * pixel_scale**2
-                    )  # Jy
-                    fluc_error = unit_factor_Jy * fluc_error * pixel_scale**2  # Jy
+                        unit_factor_Jy = 1.0 #leave it in Jy
+                    flux_bkgsub = unit_factor_Jy*ap_phot['aper_sum_bkgsub'].data[0]*pixel_scale_arcsec**2 #Jy
+                    flux = unit_factor_Jy*ap_phot['aperture_sum'].data[0]*pixel_scale_arcsec**2 #Jy
+                    bkg = unit_factor_Jy*ap_phot['aper_bkg'].data[0]*pixel_scale_arcsec**2 #Jy
+                    fluc_error = unit_factor_Jy*fluc_error*pixel_scale_arcsec**2 #Jy
                 else:
                     raise Exception(
                         "FUNITS (",
@@ -1011,33 +915,36 @@ class SedFluxer:
         ):
             print("WARNING: Source not in image. No values will be returned.")
             return None
-
-        # retrieves the pixel scale or size from the header
-        if "CD1_1" in header:
-            pixel_scale = np.absolute(header["CD1_1"]) * 3600.0
-        elif "CDELT1" in header:
-            pixel_scale = np.absolute(header["CDELT1"]) * 3600.0
+        #retrieve the pixel scale based on the header
+        #DISCLAMER: The header is assumed to be right and pixels are squares, the user should check this
+        if 'CD1_1' in header:
+            if 'CD2_1' in header:
+                pixel_scale_deg = (header['CD1_1']**2+header['CD2_1']**2)**0.5 #deg
+            elif 'CD2_1' not in header:
+                pixel_scale_deg = (header['CD1_1']**2)**0.5 #deg
+            else:
+                raise Exception('Problem with CD values, check image header')
+        elif 'CDELT1' in header:
+            pixel_scale_deg = (header['CDELT1']**2)**0.5 #deg
         else:
-            raise Exception("Neither CD1_1 nor CDELT1 were found in the header")
+            raise Exception('No CD nor CDELT were found in the header, so no pixscale could be retrieved')
+        pixel_scale_arcsec = pixel_scale_deg*3600.0 #arcsec
 
-        # defines the aperture size in pixels
-        aper_rad_pixel = aper_rad / pixel_scale
-        inner_annu_pixel = inner_annu / pixel_scale
-        outer_annu_pixel = outer_annu / pixel_scale
-        aperture = CircularAperture([[x_source, y_source]], r=aper_rad_pixel)
-        annulus_aperture = CircularAnnulus(
-            [[x_source, y_source]], r_in=inner_annu_pixel, r_out=outer_annu_pixel
-        )
+        #defines the aperture size in pixels
+        aper_rad_pixel = aper_rad/pixel_scale_arcsec
+        inner_annu_pixel = inner_annu/pixel_scale_arcsec
+        outer_annu_pixel = outer_annu/pixel_scale_arcsec
+        aperture = CircularAperture([[x_source,y_source]], r=aper_rad_pixel)
+        annulus_aperture = CircularAnnulus([[x_source,y_source]],
+                                           r_in=inner_annu_pixel, r_out=outer_annu_pixel)
 
-        aperture_area = (
-            aperture.area
-        )  # main area for corrective factor in fluctuation estimation when masked
+        aperture_area = aperture.area #main area for corrective factor in fluctuation estimation when masked
+        
+        #here is the main code for the aperture photometry
+        #--> START of the aperture photometry block
+        annulus_masks = annulus_aperture.to_mask(method='center')
 
-        # here is the main code for the aperture photometry
-        # --> START of the aperture photometry block
-        annulus_masks = annulus_aperture.to_mask(method="center")
-
-        error = 0.1 * data
+        error = 0.1*data
         bkg_median = []
         for annu_mask in annulus_masks:
             if type(mask) is np.ndarray:
@@ -2471,6 +2378,48 @@ class FitterContainer:
         )
 
 
+    @property
+    def best_model(self):
+        if self.__best_model is None:
+            self.__best_model = self.get_best_model()
+        return self.__best_model
+    
+    def get_best_model(self):
+        FULL_MODEL = self.models_array
+        
+        nmc=15
+        mc_arr=np.array([10.0,20.0,30.0,40.0,50.0,60.0,80.0,100.0,120.0,160.0,200.0,240.0,320.0,400.0,480.0])
+
+        nsigma=4
+        sigma_arr=np.array([0.1,0.316,1.0,3.16])
+
+        nms=14
+        ms_arr=np.array([0.5,1.0,2.0,4.0,8.0,12.0,16.0,24.0,32.0,48.0,64.0,96.0,128.0,160.0])
+
+        nmu=20
+        mu_arr=np.arange(float(nmu))/float(nmu)+1.0/float(nmu)/2.0
+        mu_arr=mu_arr[::-1] #reversing the array
+        theta_arr=np.arccos(mu_arr)/np.pi*180.0
+        
+        self.best_mc_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][0])
+        self.best_sigma_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][1])
+        self.best_ms_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][2])
+        self.best_theta_idx = int(FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][3])
+
+        self.best_AV = FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][4]
+        self.best_chisq = FULL_MODEL[FULL_MODEL[:,5]==np.min(FULL_MODEL[:,5])][0][5]
+
+        print('best Mc',mc_arr[self.best_mc_idx-1])
+        print('best sigma',sigma_arr[self.best_sigma_idx-1])
+        print('best m*',ms_arr[self.best_ms_idx-1])
+        print('best theta_view', theta_arr[self.best_theta_idx-1])
+
+        print('best AV', self.best_AV)
+        print('best chisq', self.best_chisq)
+        
+        return self.best_mc_idx,self.best_sigma_idx,self.best_ms_idx,self.best_theta_idx,self.best_AV
+
+
 class SedFitter(object):
     """
     A class used to fit the SED model grid
@@ -3322,7 +3271,6 @@ class SedFitter(object):
             )
 
         else:
-            # NOTE: We keep the same names as above even though they are linear now
             # preparing the fluxes and errors in linear space
             flux_fit_arr = self.flux_array
             linear_err = copy.deepcopy(
@@ -3381,7 +3329,6 @@ class SedFitter(object):
                     FULL_MODEL.append(model_idx + [result.x[0], chisq, chisq_nonlimit])
 
                 else:
-                    # ORIGNAL VERSION
                     # fitting the best av for each model (8640)
                     result = minimize(
                         self.chisq_to_minimize,
@@ -3394,36 +3341,6 @@ class SedFitter(object):
 
                     FULL_MODEL.append(model_idx + [result.x[0], chisq, chisq_nonlimit])
 
-        # TEST IN V10
-        # fitting the best av for each model (8640)
-        #                     chisq1,chisq2,chisq3 = np.inf,np.inf,np.inf
-        #                     chisq_nonlimit1,chisq_nonlimit2,chisq_nonlimit3 = np.inf,np.inf,np.inf
-        #                     result1,result2,result3 = np.inf,np.inf,np.inf
-
-        #                     result1 = minimize(self.chisq_to_minimize,x0=np.array([AV_max/2.0]),args=(flux_model_Jy),
-        #                                       bounds=Bounds(AV_min,AV_max))
-        #                     chisq1,chisq_nonlimit1 = self.chisq(flux_model_Jy,result1.x[0])
-
-        #                     if np.abs(result1.x[0]-AV_max/2.0)<10 or np.abs(result1.x[0]-AV_max)<10:
-        #                         result2 = minimize(self.chisq_to_minimize,x0=np.array([AV_max/4.0]),args=(flux_model_Jy),
-        #                                           bounds=Bounds(AV_min,AV_max/2.0))
-        #                         chisq2,chisq_nonlimit2 = self.chisq(flux_model_Jy,result2.x[0])
-
-        #                         if np.abs(result2.x[0]-AV_max/2.0)<10 or np.abs(result2.x[0]-AV_max)<10:
-        #                             result3 = minimize(self.chisq_to_minimize,x0=np.array([AV_max/8.0]),args=(flux_model_Jy),
-        #                                               bounds=Bounds(AV_min,AV_max/4.0))
-        #                             chisq3,chisq_nonlimit3 = self.chisq(flux_model_Jy,result3.x[0])
-
-        #                     chisq_arr = np.array([chisq1,chisq2,chisq3])
-        #                     chisq_nonlim_arr = np.array([chisq_nonlimit1,chisq_nonlimit2,chisq_nonlimit3])
-        #                     results_arr = np.array([result1,result2,result3])
-
-        #                     best_chisq_idx = np.where(chisq_nonlim_arr==np.min(chisq_nonlim_arr))[0]
-        #                     best_result = results_arr[best_chisq_idx]
-
-        #                     FULL_MODEL.append(model_idx+[best_result[0].x[0],
-        #                                                  chisq_arr[best_chisq_idx][0],
-        #                                                  chisq_nonlim_arr[best_chisq_idx][0]])
 
         elif method == "grid_search":
             for model_data, model_idx in tqdm(
@@ -4442,6 +4359,11 @@ class SedFitter(object):
         ----------
         models: table, `astropy.table`
             models to be averaged over. It should be an astropy table got from the get_model_info() function.
+            
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) or chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         sorted_by: str
             Specify the chisq to sort the models by.
@@ -4657,6 +4579,8 @@ class SedFitter(object):
 
         models.sort(sorted_by)
 
+        models.sort(sorted_by)
+        
         if chisq_cut is not None and core_radius_cut is None:
             average_model_table_chisq = models[models[sorted_by] <= chisq_cut]
 
@@ -5211,6 +5135,11 @@ class ModelPlotter(FitterContainer):
 
         figsize: tuple
             specify the size of the figure. Default is (6,4)
+            
+        sorted_by: str
+            Specify the chisq to sort the models by.
+            It can be either chisq (considering the upper limits in the calculation) or chisq_nonlim (only considering non upper limits).
+            Default is chisq_nonlim.
 
         sorted_by: str
             specify the chisq.
@@ -5227,7 +5156,7 @@ class ModelPlotter(FitterContainer):
             defines the marker style and color like matplotlib. Default is 'k*'
 
         markersize: int
-            defines the marker size. Default is 6
+            defines the marker size. Default is 6            
 
         cmap: str
             defines the colormap like matplotlib of the SEDs. Default is 'rainbow_r'
