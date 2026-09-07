@@ -6,7 +6,7 @@ with open("README.md","r", encoding="utf-8") as fh:
     
 setup(
     name="sedcreator",
-    version="1.0.0",
+    version="2.0.0",
     description='sedcreator is a package that has two main classes, SedFluxer and SedFitter. SedFluxer performs aperture photometry on a given image, coordinates and aperture size. It has a number of functions to print useful information and to plot the image together with apertures. SedFitter fits observations to a grid of models following the Zhang and Tan (2018) radiative transfer models.',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -28,7 +28,9 @@ setup(
         'numpy',
         'photutils>=1.3.0',
         'scipy>=1.5.0',
-        'setuptools',
+        # pkg_resources was removed in setuptools>=82.
+        # Required by get_master_dir() until migrated to importlib.resources.
+        'setuptools<82',
         'tqdm'
         ],
     packages=find_packages(),
